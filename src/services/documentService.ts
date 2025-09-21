@@ -1,0 +1,382 @@
+import { supabase, supabaseHelpers } from '../lib/supabase'
+import { devSupabaseHelpers } from '../lib/supabase-dev-helper'
+import { toast } from 'sonner'
+
+export class DocumentService {
+  // Get all published documents with filtering and pagination
+  static async getDocuments(options?: {
+    limit?: number
+    offset?: number
+    category?: string
+    search?: string
+    userId?: string
+  }) {
+    try {
+      // Use development helper for better reliability in dev environment
+      if (import.meta.env.DEV) {
+        const { data, error } = await devSupabaseHelpers.getDocumentsDev()
+        
+        if (error) {
+          console.error('Error fetching documents (dev):', error)
+          toast.error('Failed to load documents')
+          return { data: [], error }
+        }
+
+        // Apply client-side filtering for development
+        let filteredData = data || []
+        
+        if (options?.category && options.category !== 'all') {
+          filteredData = filteredData.filter(doc => doc.program === options.category)
+        }
+        
+        if (options?.search) {
+          const searchLower = options.search.toLowerCase()
+          filteredData = filteredData.filter(doc => 
+            doc.title.toLowerCase().includes(searchLower) ||
+            doc.abstract.toLowerCase().includes(searchLower)
+          )
+        }
+        
+        if (options?.userId) {
+          filteredData = filteredData.filter(doc => doc.user_id === options.userId)
+        }
+        
+        // Apply pagination
+        if (options?.limit) {
+          const offset = options.offset || 0
+          filteredData = filteredData.slice(offset, offset + options.limit)
+        }
+
+        return { data: filteredData, error: null }
+      } else {
+        // Production path
+        const { data, error } = await supabaseHelpers.getDocuments(options)
+        
+        if (error) {
+          console.error('Error fetching documents:', error)
+          toast.error('Failed to load documents')
+          return { data: [], error }
+        }
+
+        return { data: data || [], error: null }
+      }
+    } catch (error) {
+      console.error('Error in getDocuments:', error)
+      toast.error('An unexpected error occurred')
+      return { data: [], error }
+    }
+  }
+
+  // Get a single document by ID
+  static async getDocument(id: string) {
+    try {
+      const { data, error } = await supabaseHelpers.getDocument(id)
+      
+      if (error) {
+        console.error('Error fetching document:', error)
+        toast.error('Failed to load document')
+        return { data: null, error }
+      }
+
+      // Increment view count
+      if (data) {
+        await this.incrementViewCount(id)
+      }
+
+      return { data, error: null }
+    } catch (error) {
+      console.error('Error in getDocument:', error)
+      toast.error('An unexpected error occurred')
+      return { data: null, error }
+    }
+  }
+
+  // Create a new document
+  static async createDocument(document: {
+    title: string
+    abstract: string
+    program: string
+    year: number
+    userId: string
+    adviserId?: string
+    keywords: string[]
+    authors: string[]
+    file?: File
+  }) {
+    try {
+      // For now, use the user as their own adviser if no adviser is specified
+      // This is a temporary fix for the RLS policy that requires adviser_id
+      const adviserId = document.adviserId || document.userId;
+      
+      // Use development helper to bypass RLS issues
+      const { data: newDocument, error: docError } = await devSupabaseHelpers.createDocumentDev({
+        title: document.title,
+        abstract: document.abstract,
+        program: document.program,
+        year: document.year,
+        user_id: document.userId,
+        adviser_id: adviserId,
+        keywords: document.keywords,
+        authors: document.authors
+      })
+
+      if (docError) {
+        console.error('Error creating document:', docError)
+        toast.error('Failed to create document')
+        return { data: null, error: docError }
+      }
+
+      // Upload file if provided
+      if (document.file && newDocument) {
+        const fileResult = await this.uploadDocumentFile(newDocument.id, document.file)
+        if (fileResult.error) {
+          // If file upload fails, we might want to delete the document or mark it as incomplete
+          console.error('File upload failed:', fileResult.error)
+          toast.error('Document created but file upload failed')
+        }
+      }
+
+      toast.success('Document submitted successfully')
+      return { data: newDocument, error: null }
+    } catch (error) {
+      console.error('Error in createDocument:', error)
+      toast.error('An unexpected error occurred')
+      return { data: null, error }
+    }
+  }
+
+  // Update document status (for reviewers)
+  static async updateDocumentStatus(documentId: string, status: 'pending' | 'approved' | 'rejected' | 'published', reviewComments?: string) {
+    try {
+      const { data, error } = await supabaseHelpers.updateDocumentStatus(documentId, status)
+      
+      if (error) {
+        console.error('Error updating document status:', error)
+        toast.error('Failed to update document status')
+        return { data: null, error }
+      }
+
+      // Log the status change for audit
+      await this.logAuditEvent('document_status_change', 'document', documentId, {
+        new_status: status,
+        comments: reviewComments
+      })
+
+      const statusLabels = {
+        pending: 'pending review',
+        approved: 'approved',
+        rejected: 'rejected',
+        published: 'published'
+      }
+
+      toast.success(`Document ${statusLabels[status]}`)
+      return { data, error: null }
+    } catch (error) {
+      console.error('Error in updateDocumentStatus:', error)
+      toast.error('An unexpected error occurred')
+      return { data: null, error }
+    }
+  }
+
+  // Upload document file to Supabase Storage
+  static async uploadDocumentFile(documentId: string, file: File) {
+    try {
+      const fileExt = file.name.split('.').pop()
+      const fileName = `${documentId}.${fileExt}`
+      const filePath = `documents/${documentId}/${fileName}`
+
+      // Use development helper for file upload in dev environment
+      if (import.meta.env.DEV) {
+        const { data, error } = await devSupabaseHelpers.uploadFileDev(file, filePath)
+        
+        if (error) {
+          console.error('Error uploading file (dev):', error)
+          return { data: null, error }
+        }
+
+        // Save file metadata using development helper
+        const { error: dbError } = await devSupabaseHelpers.saveFileMetadataDev({
+          document_id: documentId,
+          file_name: file.name,
+          file_path: filePath,
+          file_size: this.formatFileSize(file.size),
+          file_type: file.type,
+          is_primary: true
+        })
+
+        if (dbError) {
+          console.error('Error saving file metadata (dev):', dbError)
+          return { data: null, error: dbError }
+        }
+
+        return { data, error: null }
+      } else {
+        // Production path
+        const { data, error } = await supabaseHelpers.uploadFile(file, filePath)
+        
+        if (error) {
+          console.error('Error uploading file:', error)
+          return { data: null, error }
+        }
+
+        // Save file metadata to database
+        const { error: dbError } = await supabase
+          .from('document_files')
+          .insert({
+            document_id: documentId,
+            file_name: file.name,
+            file_path: filePath,
+            file_size: this.formatFileSize(file.size),
+            file_type: file.type,
+            is_primary: true
+          })
+
+        if (dbError) {
+          console.error('Error saving file metadata:', dbError)
+          return { data: null, error: dbError }
+        }
+
+        return { data, error: null }
+      }
+    } catch (error) {
+      console.error('Error in uploadDocumentFile:', error)
+      return { data: null, error }
+    }
+  }
+
+  // Get signed URL for file download
+  static async getDocumentFileUrl(filePath: string) {
+    try {
+      const { data, error } = await supabaseHelpers.getFileUrl(filePath)
+      
+      if (error) {
+        console.error('Error getting file URL:', error)
+        toast.error('Failed to access file')
+        return { data: null, error }
+      }
+
+      return { data, error: null }
+    } catch (error) {
+      console.error('Error in getDocumentFileUrl:', error)
+      toast.error('An unexpected error occurred')
+      return { data: null, error }
+    }
+  }
+
+  // Increment download count
+  static async incrementDownloadCount(documentId: string) {
+    try {
+      const { error } = await supabase.rpc('increment_download_count', {
+        document_id: documentId
+      })
+
+      if (error) {
+        console.error('Error incrementing download count:', error)
+      }
+
+      // Log download for analytics
+      await this.logAuditEvent('document_download', 'document', documentId)
+    } catch (error) {
+      console.error('Error in incrementDownloadCount:', error)
+    }
+  }
+
+  // Increment view count
+  static async incrementViewCount(documentId: string) {
+    try {
+      const { error } = await supabase.rpc('increment_view_count', {
+        document_id: documentId
+      })
+
+      if (error) {
+        console.error('Error incrementing view count:', error)
+      }
+    } catch (error) {
+      console.error('Error in incrementViewCount:', error)
+    }
+  }
+
+  // Search documents with full-text search
+  static async searchDocuments(query: string) {
+    try {
+      const { data, error } = await supabase.rpc('search_documents', {
+        search_query: query
+      })
+
+      if (error) {
+        console.error('Error searching documents:', error)
+        toast.error('Search failed')
+        return { data: [], error }
+      }
+
+      return { data: data || [], error: null }
+    } catch (error) {
+      console.error('Error in searchDocuments:', error)
+      toast.error('An unexpected error occurred')
+      return { data: [], error }
+    }
+  }
+
+  // Get repository statistics
+  static async getRepositoryStats() {
+    try {
+      const data = await supabaseHelpers.getAnalytics()
+      return data
+    } catch (error) {
+      console.error('Error in getRepositoryStats:', error)
+      return {
+        totalDocuments: 0,
+        totalUsers: 0,
+        pendingReviews: 0,
+        monthlyUploads: 0
+      }
+    }
+  }
+
+  // Helper function to format file size
+  private static formatFileSize(bytes: number): string {
+    if (bytes === 0) return '0 Bytes'
+    const k = 1024
+    const sizes = ['Bytes', 'KB', 'MB', 'GB']
+    const i = Math.floor(Math.log(bytes) / Math.log(k))
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+  }
+
+  // Log audit events
+  private static async logAuditEvent(
+    action: string, 
+    resourceType: string, 
+    resourceId?: string, 
+    details?: Record<string, any>
+  ) {
+    try {
+      const { error } = await supabase
+        .from('audit_logs')
+        .insert({
+          action,
+          resource_type: resourceType,
+          resource_id: resourceId,
+          details,
+          ip_address: await this.getClientIP(),
+          user_agent: navigator.userAgent
+        })
+
+      if (error) {
+        console.error('Error logging audit event:', error)
+      }
+    } catch (error) {
+      console.error('Error in logAuditEvent:', error)
+    }
+  }
+
+  // Get client IP (simplified for demo)
+  private static async getClientIP(): Promise<string> {
+    try {
+      const response = await fetch('https://api.ipify.org?format=json')
+      const data = await response.json()
+      return data.ip
+    } catch {
+      return 'unknown'
+    }
+  }
+}

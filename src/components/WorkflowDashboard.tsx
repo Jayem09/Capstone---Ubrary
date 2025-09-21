@@ -1,0 +1,423 @@
+import { useState, useEffect } from 'react'
+import { Card, CardContent, CardHeader, CardTitle } from './ui/card'
+import { Badge } from './ui/badge'
+import { Button } from './ui/button'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs'
+import { 
+  FileText, 
+  Clock, 
+  CheckCircle, 
+  XCircle, 
+  Eye,
+  Edit,
+  MessageSquare,
+  Calendar,
+  User,
+  RefreshCw
+} from 'lucide-react'
+import { WorkflowService, type DocumentStatus } from '../services/workflowService'
+import { useAuth } from '../contexts/AuthContext'
+import { toast } from 'sonner'
+
+interface WorkflowDocument {
+  id: string
+  title: string
+  abstract: string
+  program: string
+  year: number
+  status: DocumentStatus
+  author_names: string
+  adviser_name: string
+  created_at: string
+  updated_at: string
+  workflow_position: number
+}
+
+const statusConfig = {
+  pending: { 
+    label: 'Pending Review', 
+    color: 'bg-yellow-100 text-yellow-800', 
+    icon: Clock,
+    description: 'Document submitted and awaiting initial review'
+  },
+  under_review: { 
+    label: 'Under Review', 
+    color: 'bg-blue-100 text-blue-800', 
+    icon: Eye,
+    description: 'Document is being reviewed by faculty'
+  },
+  needs_revision: { 
+    label: 'Needs Revision', 
+    color: 'bg-orange-100 text-orange-800', 
+    icon: Edit,
+    description: 'Document requires revisions before approval'
+  },
+  approved: { 
+    label: 'Approved', 
+    color: 'bg-green-100 text-green-800', 
+    icon: CheckCircle,
+    description: 'Document approved and ready for curation'
+  },
+  curation: { 
+    label: 'In Curation', 
+    color: 'bg-purple-100 text-purple-800', 
+    icon: MessageSquare,
+    description: 'Document being prepared for publication'
+  },
+  ready_for_publication: { 
+    label: 'Ready to Publish', 
+    color: 'bg-indigo-100 text-indigo-800', 
+    icon: CheckCircle,
+    description: 'Document ready for final publication'
+  },
+  published: { 
+    label: 'Published', 
+    color: 'bg-green-100 text-green-800', 
+    icon: CheckCircle,
+    description: 'Document published and available to public'
+  },
+  rejected: { 
+    label: 'Rejected', 
+    color: 'bg-red-100 text-red-800', 
+    icon: XCircle,
+    description: 'Document rejected and not suitable for publication'
+  }
+}
+
+export function WorkflowDashboard() {
+  const { user } = useAuth()
+  const [documents, setDocuments] = useState<WorkflowDocument[]>([])
+  const [loading, setLoading] = useState(true)
+  const [selectedStatus, setSelectedStatus] = useState<DocumentStatus | 'all'>('all')
+  const [statistics, setStatistics] = useState({
+    pending: 0,
+    under_review: 0,
+    needs_revision: 0,
+    curation: 0,
+    ready_for_publication: 0,
+    published: 0
+  })
+
+  const fetchDocuments = async (statusFilter?: DocumentStatus) => {
+    if (!user) return
+
+    setLoading(true)
+    try {
+      const result = await WorkflowService.getDocumentsByWorkflowStatus(
+        user.id,
+        statusFilter,
+        50,
+        0
+      )
+
+      if (result.error) {
+        toast.error('Failed to load documents')
+        return
+      }
+
+      setDocuments(result.data)
+    } catch (error) {
+      console.error('Error fetching documents:', error)
+      toast.error('An unexpected error occurred')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const fetchStatistics = async () => {
+    if (!user) return
+
+    try {
+      const stats = await WorkflowService.getWorkflowStatistics(user.id, user.role)
+      setStatistics(stats)
+    } catch (error) {
+      console.error('Error fetching statistics:', error)
+    }
+  }
+
+  useEffect(() => {
+    fetchDocuments()
+    fetchStatistics()
+  }, [user])
+
+  useEffect(() => {
+    fetchDocuments(selectedStatus === 'all' ? undefined : selectedStatus as DocumentStatus)
+  }, [selectedStatus])
+
+  const handleStatusChange = async (documentId: string, newStatus: DocumentStatus, reason?: string) => {
+    if (!user) return
+
+    try {
+      const result = await WorkflowService.updateDocumentStatus(
+        documentId,
+        newStatus,
+        user.id,
+        reason
+      )
+
+      if (result.error) {
+        return
+      }
+
+      // Refresh the documents list
+      fetchDocuments(selectedStatus === 'all' ? undefined : selectedStatus as DocumentStatus)
+      fetchStatistics()
+    } catch (error) {
+      console.error('Error updating status:', error)
+    }
+  }
+
+  const filteredDocuments = selectedStatus === 'all' 
+    ? documents 
+    : documents.filter(doc => doc.status === selectedStatus)
+
+  const getStatusActions = (document: WorkflowDocument) => {
+    const actions = []
+
+    switch (document.status) {
+      case 'pending':
+        if (user?.role === 'faculty' || user?.role === 'librarian' || user?.role === 'admin') {
+          actions.push(
+            <Button
+              key="start-review"
+              size="sm"
+              variant="outline"
+              onClick={() => handleStatusChange(document.id, 'under_review', 'Review started')}
+            >
+              Start Review
+            </Button>
+          )
+        }
+        break
+
+      case 'under_review':
+        if (user?.role === 'faculty' || user?.role === 'librarian' || user?.role === 'admin') {
+          actions.push(
+            <Button
+              key="approve"
+              size="sm"
+              className="bg-green-600 hover:bg-green-700"
+              onClick={() => handleStatusChange(document.id, 'approved', 'Document approved')}
+            >
+              Approve
+            </Button>,
+            <Button
+              key="needs-revision"
+              size="sm"
+              variant="outline"
+              onClick={() => handleStatusChange(document.id, 'needs_revision', 'Document needs revision')}
+            >
+              Needs Revision
+            </Button>
+          )
+        }
+        break
+
+      case 'needs_revision':
+        if (user?.id === document.author_names || user?.role === 'admin') {
+          actions.push(
+            <Button
+              key="resubmit"
+              size="sm"
+              variant="outline"
+              onClick={() => handleStatusChange(document.id, 'pending', 'Document resubmitted')}
+            >
+              Resubmit
+            </Button>
+          )
+        }
+        break
+
+      case 'approved':
+        if (user?.role === 'librarian' || user?.role === 'admin') {
+          actions.push(
+            <Button
+              key="start-curation"
+              size="sm"
+              variant="outline"
+              onClick={() => handleStatusChange(document.id, 'curation', 'Curation started')}
+            >
+              Start Curation
+            </Button>
+          )
+        }
+        break
+
+      case 'curation':
+        if (user?.role === 'librarian' || user?.role === 'admin') {
+          actions.push(
+            <Button
+              key="ready-publish"
+              size="sm"
+              className="bg-indigo-600 hover:bg-indigo-700"
+              onClick={() => handleStatusChange(document.id, 'ready_for_publication', 'Ready for publication')}
+            >
+              Ready to Publish
+            </Button>
+          )
+        }
+        break
+
+      case 'ready_for_publication':
+        if (user?.role === 'librarian' || user?.role === 'admin') {
+          actions.push(
+            <Button
+              key="publish"
+              size="sm"
+              className="bg-green-600 hover:bg-green-700"
+              onClick={() => handleStatusChange(document.id, 'published', 'Document published')}
+            >
+              Publish
+            </Button>
+          )
+        }
+        break
+    }
+
+    return actions
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <RefreshCw className="w-8 h-8 animate-spin text-gray-400" />
+        <span className="ml-2 text-gray-600">Loading workflow dashboard...</span>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Statistics Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        {Object.entries(statistics).map(([status, count]) => {
+          const config = statusConfig[status as DocumentStatus]
+          const Icon = config.icon
+          
+          return (
+            <Card key={status}>
+              <CardContent className="p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-600 capitalize">
+                      {config.label}
+                    </p>
+                    <p className="text-2xl font-bold text-gray-900">{count}</p>
+                  </div>
+                  <div className={`p-2 rounded-full ${config.color}`}>
+                    <Icon className="w-5 h-5" />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )
+        })}
+      </div>
+
+      {/* Workflow Tabs */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="flex items-center justify-between">
+            <span>Document Workflow</span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                fetchDocuments(selectedStatus === 'all' ? undefined : selectedStatus as DocumentStatus)
+                fetchStatistics()
+              }}
+            >
+              <RefreshCw className="w-4 h-4 mr-2" />
+              Refresh
+            </Button>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Tabs value={selectedStatus} onValueChange={(value) => setSelectedStatus(value as DocumentStatus | 'all')}>
+            <TabsList className="grid w-full grid-cols-8">
+              <TabsTrigger value="all">All</TabsTrigger>
+              <TabsTrigger value="pending">Pending</TabsTrigger>
+              <TabsTrigger value="under_review">Review</TabsTrigger>
+              <TabsTrigger value="needs_revision">Revision</TabsTrigger>
+              <TabsTrigger value="approved">Approved</TabsTrigger>
+              <TabsTrigger value="curation">Curation</TabsTrigger>
+              <TabsTrigger value="ready_for_publication">Ready</TabsTrigger>
+              <TabsTrigger value="published">Published</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value={selectedStatus} className="mt-6">
+              {filteredDocuments.length === 0 ? (
+                <div className="text-center py-8">
+                  <FileText className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                  <h3 className="text-lg font-medium text-gray-900 mb-2">No documents found</h3>
+                  <p className="text-gray-500">
+                    {selectedStatus === 'all' 
+                      ? 'No documents in the workflow yet.' 
+                      : `No documents with status "${statusConfig[selectedStatus as DocumentStatus]?.label}"`}
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {filteredDocuments.map((document) => {
+                    const config = statusConfig[document.status]
+                    const Icon = config.icon
+                    const actions = getStatusActions(document)
+
+                    return (
+                      <Card key={document.id} className="hover:shadow-md transition-shadow">
+                        <CardContent className="p-4">
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center space-x-3 mb-2">
+                                <Badge className={config.color}>
+                                  <Icon className="w-3 h-3 mr-1" />
+                                  {config.label}
+                                </Badge>
+                                <span className="text-sm text-gray-500">
+                                  Position: {document.workflow_position}
+                                </span>
+                              </div>
+                              
+                              <h3 className="text-lg font-medium text-gray-900 mb-1 line-clamp-1">
+                                {document.title}
+                              </h3>
+                              
+                              <p className="text-sm text-gray-600 mb-2 line-clamp-2">
+                                {document.abstract}
+                              </p>
+                              
+                              <div className="flex items-center space-x-4 text-sm text-gray-500">
+                                <div className="flex items-center">
+                                  <User className="w-4 h-4 mr-1" />
+                                  {document.author_names}
+                                </div>
+                                <div className="flex items-center">
+                                  <FileText className="w-4 h-4 mr-1" />
+                                  {document.program}
+                                </div>
+                                <div className="flex items-center">
+                                  <Calendar className="w-4 h-4 mr-1" />
+                                  {new Date(document.updated_at).toLocaleDateString()}
+                                </div>
+                              </div>
+                            </div>
+                            
+                            {actions.length > 0 && (
+                              <div className="flex items-center space-x-2 ml-4">
+                                {actions}
+                              </div>
+                            )}
+                          </div>
+                        </CardContent>
+                      </Card>
+                    )
+                  })}
+                </div>
+              )}
+            </TabsContent>
+          </Tabs>
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
