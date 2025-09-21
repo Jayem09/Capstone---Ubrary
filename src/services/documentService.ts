@@ -250,15 +250,48 @@ export class DocumentService {
       const { data, error } = await supabaseHelpers.getFileUrl(filePath)
       
       if (error) {
-        console.error('Error getting file URL:', error)
-        toast.error('Failed to access file')
+        console.error('Error getting file URL for path:', filePath, error)
         return { data: null, error }
       }
 
       return { data, error: null }
     } catch (error) {
       console.error('Error in getDocumentFileUrl:', error)
-      toast.error('An unexpected error occurred')
+      return { data: null, error }
+    }
+  }
+
+  // Get the actual file path for a document from the database
+  static async getDocumentFilePath(documentId: string) {
+    try {
+      if (import.meta.env.DEV) {
+        // In development, try to get file metadata from database
+        const { data, error } = await devSupabaseHelpers.getDocumentFilePathDev(documentId)
+        
+        if (error) {
+          console.error('Error getting document file path (dev):', error)
+          return { data: null, error }
+        }
+        
+        return { data, error: null }
+      } else {
+        // Production path - get from document_files table
+        const { data, error } = await supabase
+          .from('document_files')
+          .select('file_path, file_name')
+          .eq('document_id', documentId)
+          .eq('is_primary', true)
+          .single()
+        
+        if (error) {
+          console.error('Error getting document file path:', error)
+          return { data: null, error }
+        }
+        
+        return { data, error: null }
+      }
+    } catch (error) {
+      console.error('Error in getDocumentFilePath:', error)
       return { data: null, error }
     }
   }

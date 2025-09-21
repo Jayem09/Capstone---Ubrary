@@ -213,5 +213,31 @@ export const devSupabaseHelpers = {
       console.error('Error in saveFileMetadataDev:', error)
       return { data: null, error }
     }
+  },
+
+  // Get document file path from database (development only)
+  async getDocumentFilePathDev(documentId: string) {
+    if (import.meta.env.PROD) {
+      throw new Error('Development helpers should not be used in production')
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('document_files')
+        .select('file_path, file_name')
+        .eq('document_id', documentId)
+        .eq('is_primary', true)
+        .single()
+
+      if (error) {
+        console.error('Error getting document file path (dev):', error)
+        return { data: null, error }
+      }
+
+      return { data, error: null }
+    } catch (error) {
+      console.error('Error in getDocumentFilePathDev:', error)
+      return { data: null, error }
+    }
   }
 }

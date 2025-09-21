@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import { useState, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card'
 import { Badge } from './ui/badge'
 import { Button } from './ui/button'
@@ -9,20 +9,18 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { 
   Star, 
   MessageSquare, 
-  CheckCircle, 
-  XCircle, 
+ 
   Clock,
   User,
   Calendar,
-  FileText,
-  AlertCircle,
+  
   ThumbsUp,
   ThumbsDown
 } from 'lucide-react'
 import { WorkflowService, type DocumentReview, type ReviewType, type ReviewStatus } from '../services/workflowService'
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
-import { toast } from 'sonner'
+
 
 interface DocumentReviewProps {
   documentId: string
