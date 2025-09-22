@@ -115,6 +115,8 @@ export function WorkflowDashboard() {
 
     setLoading(true)
     try {
+      console.log('🔍 Fetching documents for user:', user.id, 'with status:', statusFilter)
+      
       const result = await WorkflowService.getDocumentsByWorkflowStatus(
         user.id,
         statusFilter,
@@ -122,14 +124,20 @@ export function WorkflowDashboard() {
         0
       )
 
+      console.log('📊 Workflow function result:', result)
+
       if (result.error) {
+        console.error('❌ Workflow function error:', result.error)
         toast.error('Failed to load documents')
         return
       }
 
+      console.log('📄 Documents received:', result.data?.length || 0, 'documents')
+      console.log('📋 Documents data:', result.data)
+      
       setDocuments(result.data)
     } catch (error) {
-      console.error('Error fetching documents:', error)
+      console.error('💥 Error fetching documents:', error)
       toast.error('An unexpected error occurred')
     } finally {
       setLoading(false)
