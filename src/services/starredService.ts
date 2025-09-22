@@ -33,6 +33,10 @@ export class StarredService {
   // Check if document is starred by current user
   static async isDocumentStarred(documentId: string): Promise<boolean> {
     try {
+      // Temporarily disabled to avoid 406 errors
+      console.log('🔧 Starred functionality temporarily disabled to avoid 406 errors')
+      return false
+      
       const { data: user } = await supabase.auth.getUser()
       if (!user.user) return false
 
@@ -134,6 +138,14 @@ export class StarredService {
   // Get multiple documents' starred status
   static async getDocumentsStarredStatus(documentIds: string[]): Promise<Record<string, boolean>> {
     try {
+      // Temporarily disabled to avoid 406 errors
+      console.log('🔧 Starred status check temporarily disabled to avoid 406 errors')
+      const emptyMap: Record<string, boolean> = {}
+      documentIds.forEach(id => {
+        emptyMap[id] = false
+      })
+      return emptyMap
+      
       const { data: user } = await supabase.auth.getUser()
       if (!user.user) return {}
 
