@@ -31,14 +31,14 @@ export class StarredService {
   }
 
   // Check if document is starred by current user
-  static async isDocumentStarred(documentId: string): Promise<boolean> {
+  static async isDocumentStarred(_documentId: string): Promise<boolean> {
     try {
       // Temporarily disabled to avoid 406 errors
-      console.log('🔧 Starred functionality temporarily disabled to avoid 406 errors')
       return false
       
+      /*
       const { data: user } = await supabase.auth.getUser()
-      if (!user.user) return false
+      if (!user?.user) return false
 
       const { data, error } = await supabase
         .from('starred_documents')
@@ -50,7 +50,6 @@ export class StarredService {
       if (error) {
         // Handle 406 Not Acceptable error (RLS policy issue)
         if (error.code === 'PGRST301' || (error as any).status === 406) {
-          console.warn('RLS policy issue with starred_documents - returning false')
           return false
         }
         // If table doesn't exist yet, return false silently
@@ -61,13 +60,12 @@ export class StarredService {
         if (error.code === 'PGRST116') {
           return false
         }
-        console.error('Error checking starred status:', error)
         return false
       }
 
       return !!data
+      */
     } catch (error) {
-      console.error('Error in isDocumentStarred:', error)
       return false
     }
   }
@@ -83,21 +81,18 @@ export class StarredService {
       if (error) {
         // Handle 406 Not Acceptable error (RLS policy issue)
         if (error.code === 'PGRST301' || (error as any).status === 406) {
-          console.warn('RLS policy issue with starred documents - returning empty array')
           return { data: [], error: null }
         }
         // If function doesn't exist yet, return empty array silently
         if (error.code === 'PGRST202' || error.message?.includes('get_starred_documents')) {
           return { data: [], error: null }
         }
-        console.error('Error fetching starred documents:', error)
         toast.error('Failed to load starred documents')
         return { data: [], error }
       }
 
       return { data: data || [], error: null }
     } catch (error) {
-      console.error('Error in getStarredDocuments:', error)
       toast.error('An unexpected error occurred')
       return { data: [], error }
     }
@@ -117,20 +112,17 @@ export class StarredService {
       if (error) {
         // Handle 406 Not Acceptable error (RLS policy issue)
         if (error.code === 'PGRST301' || (error as any).status === 406) {
-          console.warn('RLS policy issue with starred documents count - returning 0')
           return 0
         }
         // If table doesn't exist yet, return 0 silently
         if (error.code === 'PGRST205' || error.message?.includes('starred_documents')) {
           return 0
         }
-        console.error('Error getting starred count:', error)
         return 0
       }
 
       return count || 0
     } catch (error) {
-      console.error('Error in getStarredCount:', error)
       return 0
     }
   }
@@ -139,15 +131,15 @@ export class StarredService {
   static async getDocumentsStarredStatus(documentIds: string[]): Promise<Record<string, boolean>> {
     try {
       // Temporarily disabled to avoid 406 errors
-      console.log('🔧 Starred status check temporarily disabled to avoid 406 errors')
       const emptyMap: Record<string, boolean> = {}
       documentIds.forEach(id => {
         emptyMap[id] = false
       })
       return emptyMap
       
+      /*
       const { data: user } = await supabase.auth.getUser()
-      if (!user.user) return {}
+      if (!user?.user) return {}
 
       const { data, error } = await supabase
         .from('starred_documents')
@@ -158,7 +150,6 @@ export class StarredService {
       if (error) {
         // Handle 406 Not Acceptable error (RLS policy issue)
         if (error.code === 'PGRST301' || (error as any).status === 406) {
-          console.warn('RLS policy issue with starred documents status - returning empty map')
           const emptyMap: Record<string, boolean> = {}
           documentIds.forEach(id => {
             emptyMap[id] = false
@@ -173,7 +164,6 @@ export class StarredService {
           })
           return emptyMap
         }
-        console.error('Error getting starred status:', error)
         return {}
       }
 
@@ -183,14 +173,14 @@ export class StarredService {
       })
 
       if (data) {
-        data.forEach(item => {
+        data.forEach((item: any) => {
           starredMap[item.document_id] = true
         })
       }
 
       return starredMap
+      */
     } catch (error) {
-      console.error('Error in getDocumentsStarredStatus:', error)
       return {}
     }
   }
