@@ -1,16 +1,60 @@
--- Fix the get_documents_by_workflow_status function to properly handle faculty role
+-- Complete fix for workflow function - handles all function signatures
 
--- Drop ALL existing function overloads by specifying exact signatures
-DROP FUNCTION IF EXISTS get_documents_by_workflow_status(INTEGER, INTEGER, UUID);
-DROP FUNCTION IF EXISTS get_documents_by_workflow_status(INTEGER, INTEGER, TEXT);
-DROP FUNCTION IF EXISTS get_documents_by_workflow_status(UUID, TEXT, INTEGER, INTEGER);
-DROP FUNCTION IF EXISTS get_documents_by_workflow_status(UUID, document_status, INTEGER, INTEGER);
+-- First, let's see what functions exist
+SELECT 
+    proname as function_name,
+    pg_get_function_identity_arguments(oid) as arguments
+FROM pg_proc 
+WHERE proname = 'get_documents_by_workflow_status';
 
--- Also try dropping with default parameter signatures
-DROP FUNCTION IF EXISTS get_documents_by_workflow_status(INTEGER, INTEGER, UUID DEFAULT);
-DROP FUNCTION IF EXISTS get_documents_by_workflow_status(UUID, TEXT DEFAULT, INTEGER DEFAULT, INTEGER DEFAULT);
+-- Drop ALL possible function signatures
+DO $$
+BEGIN
+    -- Try to drop all possible variations
+    BEGIN
+        DROP FUNCTION get_documents_by_workflow_status(INTEGER, INTEGER, UUID);
+    EXCEPTION WHEN others THEN
+        NULL;
+    END;
+    
+    BEGIN
+        DROP FUNCTION get_documents_by_workflow_status(INTEGER, INTEGER, TEXT);
+    EXCEPTION WHEN others THEN
+        NULL;
+    END;
+    
+    BEGIN
+        DROP FUNCTION get_documents_by_workflow_status(UUID, TEXT, INTEGER, INTEGER);
+    EXCEPTION WHEN others THEN
+        NULL;
+    END;
+    
+    BEGIN
+        DROP FUNCTION get_documents_by_workflow_status(UUID, document_status, INTEGER, INTEGER);
+    EXCEPTION WHEN others THEN
+        NULL;
+    END;
+    
+    BEGIN
+        DROP FUNCTION get_documents_by_workflow_status(user_id_param UUID, status_filter TEXT, limit_count INTEGER, offset_count INTEGER);
+    EXCEPTION WHEN others THEN
+        NULL;
+    END;
+    
+    BEGIN
+        DROP FUNCTION get_documents_by_workflow_status(limit_count INTEGER, offset_count INTEGER, user_id_param UUID);
+    EXCEPTION WHEN others THEN
+        NULL;
+    END;
+    
+    BEGIN
+        DROP FUNCTION get_documents_by_workflow_status(limit_count INTEGER, offset_count INTEGER, status_filter TEXT);
+    EXCEPTION WHEN others THEN
+        NULL;
+    END;
+END $$;
 
--- Create the correct function that handles faculty role properly
+-- Now create the correct function with the expected signature
 CREATE OR REPLACE FUNCTION get_documents_by_workflow_status(
     user_id_param UUID,
     status_filter TEXT DEFAULT NULL,
@@ -96,4 +140,10 @@ GRANT EXECUTE ON FUNCTION get_documents_by_workflow_status TO authenticated;
 -- Force refresh the PostgREST schema cache
 NOTIFY pgrst, 'reload schema';
 
-SELECT 'Workflow function fixed - faculty can now see documents they advise!' as status;
+-- Show what functions exist now
+SELECT 
+    'Function recreated successfully!' as status,
+    proname as function_name,
+    pg_get_function_identity_arguments(oid) as arguments
+FROM pg_proc 
+WHERE proname = 'get_documents_by_workflow_status';
