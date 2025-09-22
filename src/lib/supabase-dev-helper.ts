@@ -12,6 +12,7 @@ export const devSupabaseHelpers = {
     year: number
     user_id: string
     adviser_id?: string
+    adviser_name?: string
     keywords: string[]
     authors: string[]
   }) {
@@ -30,7 +31,9 @@ export const devSupabaseHelpers = {
           year: document.year,
           user_id: document.user_id,
           adviser_id: document.adviser_id || document.user_id, // Use user as their own adviser if not specified
-          status: 'pending'
+          status: 'pending',
+          author_names: document.authors.length > 0 ? document.authors.join(', ') : null,
+          adviser_name: document.adviser_name || null
         })
         .select()
         .single()
@@ -88,31 +91,17 @@ export const devSupabaseHelpers = {
         }
       }
 
-      // Insert authors if provided
+      // Authors and adviser are now stored as text fields, no need for complex linking
       if (document.authors.length > 0) {
-        try {
-          // Find users by email
-          const { data: users, error: userError } = await supabase
-            .from('users')
-            .select('id, email')
-            .in('email', document.authors)
-
-          if (userError) {
-            console.warn('Error finding authors:', userError)
-          } else if (users && doc) {
-            // Link authors to document
-            await supabase
-              .from('document_authors')
-              .insert(
-                users.map(user => ({
-                  document_id: doc.id,
-                  user_id: user.id
-                }))
-              )
-          }
-        } catch (error) {
-          console.warn('Error processing authors:', error)
-        }
+        console.log('✅ Authors stored as text:', document.authors.join(', '))
+      } else {
+        console.log('📝 No authors provided, author_names field will be null')
+      }
+      
+      if (document.adviser_name) {
+        console.log('✅ Adviser stored as text:', document.adviser_name)
+      } else {
+        console.log('📝 No adviser provided, adviser_name field will be null')
       }
 
       return { data: doc, error: null }
@@ -133,9 +122,6 @@ export const devSupabaseHelpers = {
         .from('documents')
         .select(`
           *,
-          authors:document_authors(
-            users(id, first_name, last_name, email)
-          ),
           adviser:users!adviser_id(id, first_name, last_name, email),
           keywords:document_keywords(
             keywords(id, name)

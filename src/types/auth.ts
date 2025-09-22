@@ -31,6 +31,8 @@ export interface RolePermissions {
   canApprove: boolean;
   canEdit: boolean;
   canDelete: boolean;
+  canViewWorkflow: boolean;
+  canManageWorkflow: boolean;
   canManageUsers: boolean;
   canViewAnalytics: boolean;
   canManageCategories: boolean;
@@ -47,6 +49,8 @@ export const ROLE_PERMISSIONS: Record<UserRole, RolePermissions> = {
     canApprove: false,
     canEdit: false,
     canDelete: false,
+    canViewWorkflow: false, 
+    canManageWorkflow: false,
     canManageUsers: false,
     canViewAnalytics: false,
     canManageCategories: false,
@@ -61,6 +65,8 @@ export const ROLE_PERMISSIONS: Record<UserRole, RolePermissions> = {
     canApprove: true,
     canEdit: true,
     canDelete: false,
+    canViewWorkflow: true, 
+    canManageWorkflow: false, 
     canManageUsers: false,
     canViewAnalytics: true,
     canManageCategories: false,
@@ -75,6 +81,8 @@ export const ROLE_PERMISSIONS: Record<UserRole, RolePermissions> = {
     canApprove: true,
     canEdit: true,
     canDelete: true,
+    canViewWorkflow: true, 
+    canManageWorkflow: true,
     canManageUsers: false,
     canViewAnalytics: true,
     canManageCategories: true,
@@ -89,6 +97,8 @@ export const ROLE_PERMISSIONS: Record<UserRole, RolePermissions> = {
     canApprove: true,
     canEdit: true,
     canDelete: true,
+    canViewWorkflow: true,
+    canManageWorkflow: true,
     canManageUsers: true,
     canViewAnalytics: true,
     canManageCategories: true,

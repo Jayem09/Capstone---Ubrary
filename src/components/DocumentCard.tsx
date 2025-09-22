@@ -2,9 +2,11 @@ import { Download, Eye, Star, Calendar, User, FileText } from "lucide-react";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
 import { Card, CardContent, CardFooter } from "./ui/card";
-import { ImageWithFallback } from "./figma/ImageWithFallback";
+import { Image } from "./ui/image";
 import { toast } from "sonner";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { DocumentService } from "../services/documentService";
+import { StarredService } from "../services/starredService";
 
 interface Document {
   id: string;
@@ -25,33 +27,150 @@ interface Document {
 interface DocumentCardProps {
   document: Document;
   onDocumentView: (document: Document) => void;
+  onDownloadUpdate?: (documentId: string, newCount: number) => void;
 }
 
-export function DocumentCard({ document, onDocumentView }: DocumentCardProps) {
+export function DocumentCard({ document, onDocumentView, onDownloadUpdate }: DocumentCardProps) {
   const [isStarred, setIsStarred] = useState(false);
+  const [downloadCount, setDownloadCount] = useState(document.downloadCount);
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [isStarring, setIsStarring] = useState(false);
+
+  // Check if document is starred on component mount
+  useEffect(() => {
+    const checkStarredStatus = async () => {
+      const starred = await StarredService.isDocumentStarred(document.id);
+      setIsStarred(starred);
+    };
+    checkStarredStatus();
+  }, [document.id]);
 
   const handleView = () => {
     onDocumentView(document);
   };
 
-  const handleDownload = (e: React.MouseEvent) => {
+  const handleStar = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    toast.success(`Downloaded "${document.title}"`, {
-      description: "PDF file has been downloaded to your device"
-    });
+    
+    if (isStarring) return;
+    
+    setIsStarring(true);
+    
+    try {
+      const { isStarred: newStarredState } = await StarredService.toggleStar(document.id);
+      setIsStarred(newStarredState);
+    } catch (error) {
+      console.error('Error toggling star:', error);
+    } finally {
+      setIsStarring(false);
+    }
   };
 
-  const handleStar = (e: React.MouseEvent) => {
+  const handleDownload = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    setIsStarred(!isStarred);
-    toast.success(isStarred ? "Removed from starred" : "Added to starred");
+    
+    if (isDownloading) return;
+    
+    setIsDownloading(true);
+    
+    try {
+      // Get the document file path first
+      const filePathResult = await DocumentService.getDocumentFilePath(document.id);
+      
+      if (filePathResult.data && filePathResult.data.file_path) {
+        // Get the signed URL for download
+        const urlResult = await DocumentService.getDocumentFileUrl(filePathResult.data.file_path);
+        
+        if (urlResult.data && urlResult.data.signedUrl) {
+          console.log('Download URL:', urlResult.data.signedUrl); // Debug log
+          
+          // Increment download count
+          await DocumentService.incrementDownloadCount(document.id);
+          
+          // Update local count
+          const newCount = downloadCount + 1;
+          setDownloadCount(newCount);
+          
+          // Notify parent component
+          if (onDownloadUpdate) {
+            onDownloadUpdate(document.id, newCount);
+          }
+          
+          // Try multiple download approaches
+          try {
+            // Method 1: Fetch and create blob URL (most reliable)
+            try {
+              const response = await fetch(urlResult.data.signedUrl);
+              if (response.ok) {
+                const blob = await response.blob();
+                const blobUrl = URL.createObjectURL(blob);
+                
+                const link = window.document.createElement('a');
+                link.href = blobUrl;
+                link.download = `${document.title.replace(/[^a-zA-Z0-9\s]/g, '_')}.pdf`;
+                window.document.body.appendChild(link);
+                link.click();
+                window.document.body.removeChild(link);
+                
+                // Clean up blob URL
+                setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+                
+                toast.success(`Downloaded "${document.title}"`, {
+                  description: "PDF file has been downloaded to your device"
+                });
+                return;
+              }
+            } catch (fetchError) {
+              console.warn('Fetch download failed, trying alternative:', fetchError);
+            }
+            
+            // Method 2: Direct programmatic download link
+            const link = window.document.createElement('a');
+            link.href = urlResult.data.signedUrl;
+            link.download = `${document.title.replace(/[^a-zA-Z0-9\s]/g, '_')}.pdf`;
+            link.target = '_blank';
+            link.rel = 'noopener noreferrer';
+            
+            // Force download attribute
+            link.setAttribute('download', `${document.title.replace(/[^a-zA-Z0-9\s]/g, '_')}.pdf`);
+            
+            window.document.body.appendChild(link);
+            link.click();
+            window.document.body.removeChild(link);
+            
+            toast.success(`Download started for "${document.title}"`, {
+              description: "Check your downloads folder"
+            });
+          } catch (downloadError) {
+            console.error('All download methods failed:', downloadError);
+            // Final fallback: open URL in new tab
+            window.open(urlResult.data.signedUrl, '_blank');
+            toast.info("Download opened in new tab", {
+              description: "Right-click the PDF and select 'Save as' to download"
+            });
+          }
+        } else {
+          throw new Error('Could not get download URL');
+        }
+      } else {
+        throw new Error('Document file not found');
+      }
+    } catch (error) {
+      console.error('Download failed:', error);
+      toast.error("Download failed", {
+        description: "Please try again or contact support"
+      });
+    } finally {
+      setIsDownloading(false);
+    }
   };
+
 
   return (
     <Card className="group hover:shadow-lg transition-shadow duration-200 cursor-pointer">
       {/* Thumbnail */}
       <div className="relative h-48 bg-gray-100 rounded-t-lg overflow-hidden">
-        <ImageWithFallback
+        <Image
           src={document.thumbnail}
           alt={document.title}
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
@@ -65,8 +184,9 @@ export function DocumentCard({ document, onDocumentView }: DocumentCardProps) {
             variant="secondary" 
             className={`h-8 w-8 p-0 ${isStarred ? "text-yellow-500 border-yellow-500" : ""}`}
             onClick={handleStar}
+            disabled={isStarring}
           >
-            <Star className={`w-4 h-4 ${isStarred ? "fill-yellow-500" : ""}`} />
+            <Star className={`w-4 h-4 ${isStarred ? "fill-yellow-500" : ""} ${isStarring ? "animate-pulse" : ""}`} />
           </Button>
         </div>
         
@@ -83,9 +203,10 @@ export function DocumentCard({ document, onDocumentView }: DocumentCardProps) {
             size="sm" 
             className="flex-1 bg-[#8B0000] hover:bg-red-800"
             onClick={handleDownload}
+            disabled={isDownloading}
           >
             <Download className="w-4 h-4 mr-1" />
-            Download
+            {isDownloading ? "Downloading..." : "Download"}
           </Button>
         </div>
       </div>
@@ -101,6 +222,14 @@ export function DocumentCard({ document, onDocumentView }: DocumentCardProps) {
           <User className="w-3 h-3 mr-1" />
           <span className="line-clamp-1">{document.authors.join(", ")}</span>
         </div>
+
+        {/* Adviser */}
+        {document.adviser && document.adviser !== 'Unknown Adviser' && (
+          <div className="flex items-center text-sm text-gray-500 mb-2">
+            <span className="font-medium mr-1">Adviser:</span>
+            <span className="line-clamp-1">{document.adviser}</span>
+          </div>
+        )}
 
         {/* Program and Year */}
         <div className="flex items-center justify-between text-sm text-gray-500 mb-3">
@@ -134,7 +263,7 @@ export function DocumentCard({ document, onDocumentView }: DocumentCardProps) {
           <div className="flex items-center space-x-3">
             <div className="flex items-center">
               <Download className="w-3 h-3 mr-1" />
-              {document.downloadCount}
+              {downloadCount}
             </div>
             <div className="flex items-center">
               <FileText className="w-3 h-3 mr-1" />

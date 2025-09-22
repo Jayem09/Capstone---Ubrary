@@ -1,14 +1,29 @@
+
 import { createContext, useContext, useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
 import type { User, AuthState, UserRole, RolePermissions } from '../types/auth';
 import { ROLE_PERMISSIONS } from '../types/auth';
+import { supabase } from '../lib/supabase';
 
 interface AuthContextType extends AuthState {
   login: (email: string, password: string) => Promise<void>;
+  register: (userData: RegisterData) => Promise<void>;
   logout: () => void;
   switchRole: (role: UserRole) => void; // For demo purposes
   hasPermission: (permission: keyof RolePermissions) => boolean;
   getUserPermissions: () => RolePermissions;
+}
+
+interface RegisterData {
+  email: string;
+  password: string;
+  firstName: string;
+  lastName: string;
+  role: UserRole;
+  program?: string;
+  department?: string;
+  studentId?: string;
+  employeeId?: string;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -76,63 +91,317 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     isLoading: true,
   });
 
-  // Initialize with a default user for demo
+  // Initialize authentication state - SIMPLE VERSION
   useEffect(() => {
-    // Simulate loading user from localStorage or API
-    const savedUser = localStorage.getItem('ubrary_user');
-    if (savedUser) {
-      try {
-        const user = JSON.parse(savedUser);
-        setAuthState({
-          user,
-          isAuthenticated: true,
-          isLoading: false,
-        });
-      } catch {
+    initializeAuth();
+  }, []);
+
+  const initializeAuth = async () => {
+    try {
+      console.log('🔧 Checking if user is logged in...');
+      
+      // Get current session
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (session?.user) {
+        console.log('✅ Found session for:', session.user.email);
+        
+        // Check if user exists in database
+        const { data: dbUser, error: selectError } = await supabase
+          .from('users')
+          .select('*')
+          .eq('id', session.user.id)
+          .single();
+        
+        if (dbUser) {
+          console.log('🎉 User exists in DB - logging in!');
+          
+          // User exists in DB → LOGIN
+          setAuthState({
+            user: {
+              id: dbUser.id,
+              email: dbUser.email,
+              firstName: dbUser.first_name,
+              lastName: dbUser.last_name,
+              role: dbUser.role,
+              program: dbUser.program,
+              department: dbUser.department,
+              studentId: dbUser.student_id,
+              employeeId: dbUser.employee_id,
+              avatar: `${dbUser.first_name?.[0] || 'U'}${dbUser.last_name?.[0] || ''}`,
+              isActive: dbUser.is_active,
+              createdAt: dbUser.created_at,
+              lastLoginAt: dbUser.last_login_at,
+            },
+            isAuthenticated: true,
+            isLoading: false,
+          });
+        } else if (selectError) {
+          console.log('🔧 RLS blocking user query - logging in with session data');
+          console.log('🔍 Error details:', selectError);
+          
+          // RLS is blocking us from reading the user - login with session data directly
+          console.log('✅ Setting auth state with session data...');
+          setAuthState({
+              user: {
+                id: session.user.id,
+                email: session.user.email || '',
+                firstName: session.user.user_metadata?.first_name || 'User',
+                lastName: session.user.user_metadata?.last_name || '',
+                role: (session.user.user_metadata?.role as any) || 'student',
+                program: session.user.user_metadata?.program,
+                department: session.user.user_metadata?.department,
+                studentId: session.user.user_metadata?.student_id,
+                employeeId: session.user.user_metadata?.employee_id,
+                avatar: `${session.user.user_metadata?.first_name?.[0] || 'U'}${session.user.user_metadata?.last_name?.[0] || ''}`,
+                isActive: true,
+                createdAt: session.user.created_at || new Date().toISOString(),
+                lastLoginAt: new Date().toISOString(),
+              },
+              isAuthenticated: true,
+              isLoading: false,
+            });
+            console.log('🎉 Auth state set - user should be logged in!');
+            return; // Exit early, don't try to create user
+        } else {
+          console.log('⚠️ User has session but not in DB - creating profile...');
+          
+          // Create user profile from session metadata
+          try {
+            const { error: insertError } = await supabase
+              .from('users')
+              .insert({
+                id: session.user.id,
+                email: session.user.email,
+                first_name: session.user.user_metadata?.first_name || 'User',
+                last_name: session.user.user_metadata?.last_name || '',
+                role: (session.user.user_metadata?.role as any) || 'student',
+                program: session.user.user_metadata?.program,
+                department: session.user.user_metadata?.department,
+                student_id: session.user.user_metadata?.student_id,
+                employee_id: session.user.user_metadata?.employee_id,
+              });
+
+            if (insertError) {
+              console.log('🔧 User creation failed, logging in with session data anyway');
+              
+              // If it's a duplicate key error, the user already exists but RLS is blocking us
+              if (insertError.code === '23505') {
+                
+                // Login with session data since user exists
+                setAuthState({
+                  user: {
+                    id: session.user.id,
+                    email: session.user.email || '',
+                    firstName: session.user.user_metadata?.first_name || 'User',
+                    lastName: session.user.user_metadata?.last_name || '',
+                    role: (session.user.user_metadata?.role as any) || 'student',
+                    program: session.user.user_metadata?.program,
+                    department: session.user.user_metadata?.department,
+                    studentId: session.user.user_metadata?.student_id,
+                    employeeId: session.user.user_metadata?.employee_id,
+                    avatar: `${session.user.user_metadata?.first_name?.[0] || 'U'}${session.user.user_metadata?.last_name?.[0] || ''}`,
+                    isActive: true,
+                    createdAt: session.user.created_at || new Date().toISOString(),
+                    lastLoginAt: new Date().toISOString(),
+                  },
+                  isAuthenticated: true,
+                  isLoading: false,
+                });
+              } else {
+                setAuthState({
+                  user: null,
+                  isAuthenticated: false,
+                  isLoading: false,
+                });
+              }
+            } else {
+              console.log('✅ User profile created - logging in!');
+              
+              // Login with session data
+              setAuthState({
+                user: {
+                  id: session.user.id,
+                  email: session.user.email || '',
+                  firstName: session.user.user_metadata?.first_name || 'User',
+                  lastName: session.user.user_metadata?.last_name || '',
+                  role: (session.user.user_metadata?.role as any) || 'student',
+                  program: session.user.user_metadata?.program,
+                  department: session.user.user_metadata?.department,
+                  studentId: session.user.user_metadata?.student_id,
+                  employeeId: session.user.user_metadata?.employee_id,
+                  avatar: `${session.user.user_metadata?.first_name?.[0] || 'U'}${session.user.user_metadata?.last_name?.[0] || ''}`,
+                  isActive: true,
+                  createdAt: session.user.created_at || new Date().toISOString(),
+                  lastLoginAt: new Date().toISOString(),
+                },
+                isAuthenticated: true,
+                isLoading: false,
+              });
+            }
+          } catch (createError) {
+            console.error('Error creating user profile:', createError);
+            setAuthState({
+              user: null,
+              isAuthenticated: false,
+              isLoading: false,
+            });
+          }
+        }
+      } else {
+        console.log('❌ No session found - need to login');
         setAuthState({
           user: null,
           isAuthenticated: false,
           isLoading: false,
         });
       }
-    } else {
-      // For demo, auto-login as student
-      const defaultUser = MOCK_USERS[0];
-      setAuthState({
-        user: defaultUser,
-        isAuthenticated: true,
-        isLoading: false,
-      });
-      localStorage.setItem('ubrary_user', JSON.stringify(defaultUser));
-    }
-  }, []);
-
-  const login = async (email: string, password: string) => {
-    setAuthState(prev => ({ ...prev, isLoading: true }));
-    
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    
-    const user = MOCK_USERS.find(u => u.email === email);
-    if (user && password === 'password') { // Simple demo password
-      const updatedUser = { ...user, lastLoginAt: new Date().toISOString() };
-      setAuthState({
-        user: updatedUser,
-        isAuthenticated: true,
-        isLoading: false,
-      });
-      localStorage.setItem('ubrary_user', JSON.stringify(updatedUser));
-    } else {
+    } catch (error) {
+      console.error('Error checking auth:', error);
       setAuthState({
         user: null,
         isAuthenticated: false,
         isLoading: false,
       });
-      throw new Error('Invalid credentials');
     }
   };
 
-  const logout = () => {
+
+
+
+  const login = async (email: string, password: string) => {
+    setAuthState(prev => ({ ...prev, isLoading: true }));
+    
+    try {
+      // Try real Supabase authentication first
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (error) {
+        // If Supabase auth fails, fall back to mock authentication for development
+        console.log('Supabase auth failed, trying mock authentication:', error.message);
+        
+        const user = MOCK_USERS.find(u => u.email === email);
+        if (user && password === 'password') {
+          const updatedUser = { ...user, lastLoginAt: new Date().toISOString() };
+          setAuthState({
+            user: updatedUser,
+            isAuthenticated: true,
+            isLoading: false,
+          });
+          localStorage.setItem('ubrary_user', JSON.stringify(updatedUser));
+          return;
+        } else {
+          throw new Error('Invalid credentials');
+        }
+      }
+
+      // Real authentication succeeded - user profile will be loaded by the auth state change listener
+      if (!data.user) {
+        throw new Error('Authentication failed');
+      }
+
+    } catch (error) {
+      setAuthState({
+        user: null,
+        isAuthenticated: false,
+        isLoading: false,
+      });
+      throw error;
+    }
+  };
+
+  const register = async (userData: RegisterData) => {
+    setAuthState(prev => ({ ...prev, isLoading: true }));
+
+    try {
+      // Try real Supabase registration with metadata
+      const { data: authData, error: authError } = await supabase.auth.signUp({
+        email: userData.email,
+        password: userData.password,
+        options: {
+          data: {
+            first_name: userData.firstName,
+            last_name: userData.lastName,
+            role: userData.role,
+            program: userData.program,
+            department: userData.department,
+            student_id: userData.studentId,
+            employee_id: userData.employeeId,
+          }
+        }
+      });
+
+      if (authError) {
+        console.error('Supabase auth signup error:', authError);
+        throw new Error(authError.message || 'Registration failed');
+      }
+
+      if (!authData.user) {
+        throw new Error('Registration failed - no user returned');
+      }
+
+      console.log('✅ User registration successful:', authData.user.id);
+
+      // The trigger should automatically create the user profile
+      // Let's verify it was created
+      try {
+        const { data: profile, error: profileError } = await supabase
+          .from('users')
+          .select('*')
+          .eq('id', authData.user.id)
+          .single();
+
+        if (profileError) {
+          console.warn('Profile not found, creating manually:', profileError);
+          
+          // Manually create profile if trigger failed
+          const { error: insertError } = await supabase
+            .from('users')
+            .insert({
+              id: authData.user.id,
+              email: userData.email,
+              first_name: userData.firstName,
+              last_name: userData.lastName,
+              role: userData.role,
+              program: userData.program,
+              department: userData.department,
+              student_id: userData.studentId,
+              employee_id: userData.employeeId,
+            });
+
+          if (insertError) {
+            console.error('Failed to create user profile:', insertError);
+            await supabase.auth.signOut();
+            throw new Error('Failed to create user profile: ' + insertError.message);
+          }
+        } else {
+          console.log('✅ User profile created successfully:', profile);
+        }
+      } catch (profileCheckError) {
+        console.warn('Could not verify profile creation:', profileCheckError);
+        // Continue anyway - the trigger might have worked
+      }
+
+      // User profile will be loaded by the auth state change listener
+
+    } catch (error) {
+      setAuthState(prev => ({ ...prev, isLoading: false }));
+      throw error;
+    }
+  };
+
+  const logout = async () => {
+    try {
+      // Try to sign out from Supabase
+      await supabase.auth.signOut();
+    } catch (error) {
+      console.error('Error signing out from Supabase:', error);
+    }
+    
+    // Clear local state regardless
     setAuthState({
       user: null,
       isAuthenticated: false,
@@ -171,6 +440,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       value={{
         ...authState,
         login,
+        register,
         logout,
         switchRole,
         hasPermission,

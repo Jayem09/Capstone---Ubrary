@@ -7,12 +7,14 @@ export const supabase = createClient(
   supabaseConfig.getAnonKey(),
   {
     auth: {
-      // Disable automatic token refresh for development
-      autoRefreshToken: false,
-      // Don't persist session in localStorage for development
-      persistSession: false,
-      // Don't detect session in URL
-      detectSessionInUrl: false
+      // Always enable these for better UX - no more session clearing needed!
+      autoRefreshToken: true,
+      persistSession: true,
+      detectSessionInUrl: true,
+      // Always use localStorage for session persistence
+      storage: window.localStorage,
+      // Set longer session timeout
+      storageKey: 'ubrary-auth-token'
     }
   }
 )

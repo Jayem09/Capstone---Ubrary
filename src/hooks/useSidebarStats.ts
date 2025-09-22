@@ -1,11 +1,13 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
+import { StarredService } from '../services/starredService'
 
 export interface SidebarStats {
   totalDocuments: number
   recentDocuments: number
   myUploads: number
+  starredDocuments: number
   workflowDocuments: number
   categoryCounts: Record<string, number>
   repositoryStats: {
@@ -20,6 +22,7 @@ export function useSidebarStats() {
     totalDocuments: 0,
     recentDocuments: 0,
     myUploads: 0,
+    starredDocuments: 0,
     workflowDocuments: 0,
     categoryCounts: {},
     repositoryStats: {
@@ -64,6 +67,9 @@ export function useSidebarStats() {
         .from('documents')
         .select('*', { count: 'exact', head: true })
         .eq('user_id', user.id)
+
+      // Fetch starred documents count
+      const starredCount = await StarredService.getStarredCount()
 
       // Fetch workflow documents (pending, under_review, needs_revision)
       const { count: workflowDocs } = await supabase
@@ -111,6 +117,7 @@ export function useSidebarStats() {
         totalDocuments: totalDocs || 0,
         recentDocuments: recentDocs || 0,
         myUploads: myUploads || 0,
+        starredDocuments: starredCount,
         workflowDocuments: workflowDocs || 0,
         categoryCounts,
         repositoryStats: {

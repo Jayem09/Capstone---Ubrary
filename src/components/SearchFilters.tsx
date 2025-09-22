@@ -15,33 +15,50 @@ interface SearchFiltersProps {
   onSearchChange: (query: string) => void;
   viewMode: "grid" | "list";
   onViewModeChange: (mode: "grid" | "list") => void;
+  onYearFilter?: (year: string) => void;
+  onProgramFilter?: (program: string) => void;
+  onSortChange?: (sortBy: string) => void;
+  selectedYear?: string;
+  selectedProgram?: string;
+  selectedSort?: string;
 }
 
 export function SearchFilters({ 
   searchQuery, 
   onSearchChange, 
   viewMode, 
-  onViewModeChange 
+  onViewModeChange,
+  onYearFilter,
+  onProgramFilter,
+  onSortChange,
+  selectedYear = "all",
+  selectedProgram = "all",
+  selectedSort = "date"
 }: SearchFiltersProps) {
-  const handleFilterClick = () => {
-    toast.info("Advanced filters", {
-      description: "Additional filter options will be available soon"
-    });
-  };
+  // Removed unused handleFilterClick function
 
   const handleYearChange = (year: string) => {
+    if (onYearFilter) {
+      onYearFilter(year);
+    }
     toast.success(`Filter applied: ${year === "all" ? "All years" : year}`, {
       description: "Documents filtered by year"
     });
   };
 
   const handleProgramChange = (program: string) => {
+    if (onProgramFilter) {
+      onProgramFilter(program);
+    }
     toast.success("Program filter applied", {
       description: `Showing documents from ${program === "all" ? "all programs" : program}`
     });
   };
 
   const handleSortChange = (sortBy: string) => {
+    if (onSortChange) {
+      onSortChange(sortBy);
+    }
     toast.success(`Sorted by ${sortBy}`, {
       description: "Document list has been reordered"
     });
@@ -71,30 +88,34 @@ export function SearchFilters({
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4">
           {/* Year Filter */}
-          <Select defaultValue="all" onChange={handleYearChange}>
+          <Select value={selectedYear} onValueChange={handleYearChange}>
             <SelectTrigger className="w-full sm:w-32">
               <SelectValue placeholder="Year" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Years</SelectItem>
+              <SelectItem value="2025">2025</SelectItem>
               <SelectItem value="2024">2024</SelectItem>
               <SelectItem value="2023">2023</SelectItem>
               <SelectItem value="2022">2022</SelectItem>
               <SelectItem value="2021">2021</SelectItem>
+              <SelectItem value="2020">2020</SelectItem>
             </SelectContent>
           </Select>
 
           {/* Program Filter */}
-          <Select defaultValue="all" onChange={handleProgramChange}>
+          <Select value={selectedProgram} onValueChange={handleProgramChange}>
             <SelectTrigger className="w-full sm:w-48">
               <SelectValue placeholder="Program" />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Programs</SelectItem>
-              <SelectItem value="bsit">BS Information Technology</SelectItem>
-              <SelectItem value="bscs">BS Computer Science</SelectItem>
-              <SelectItem value="bsee">BS Electrical Engineering</SelectItem>
-              <SelectItem value="bsba">BS Business Administration</SelectItem>
+              <SelectItem value="BS Information Technology">BS Information Technology</SelectItem>
+              <SelectItem value="BS Computer Science">BS Computer Science</SelectItem>
+              <SelectItem value="BS Electrical Engineering">BS Electrical Engineering</SelectItem>
+              <SelectItem value="BS Business Administration">BS Business Administration</SelectItem>
+              <SelectItem value="Bachelor of Secondary Education">Bachelor of Secondary Education</SelectItem>
+              <SelectItem value="BS Nursing">BS Nursing</SelectItem>
             </SelectContent>
           </Select>
 
@@ -103,14 +124,17 @@ export function SearchFilters({
             <DropdownMenuTrigger asChild>
               <Button variant="outline" className="w-full sm:w-auto">
                 <SortAsc className="w-4 h-4 mr-2" />
-                Sort by
+                Sort by: {selectedSort === "date" ? "Date Added" : 
+                         selectedSort === "title" ? "Title" :
+                         selectedSort === "author" ? "Author" :
+                         selectedSort === "downloads" ? "Downloads" : "Date Added"}
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent>
-              <DropdownMenuItem onClick={() => handleSortChange("Date Added")}>Date Added</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleSortChange("Title")}>Title</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleSortChange("Author")}>Author</DropdownMenuItem>
-              <DropdownMenuItem onClick={() => handleSortChange("Downloads")}>Downloads</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleSortChange("date")}>Date Added</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleSortChange("title")}>Title</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleSortChange("author")}>Author</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => handleSortChange("downloads")}>Downloads</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>

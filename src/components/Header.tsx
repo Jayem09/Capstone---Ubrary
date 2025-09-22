@@ -44,7 +44,7 @@ export function Header() {
   if (!user) return null;
 
   return (
-    <header className="bg-[#8B0000] text-white shadow-lg">
+    <header className="bg-[#8B0000] text-white shadow-lg relative z-10">
       <div className="flex items-center justify-between px-4 lg:px-6 py-4">
         {/* Left side - Logo and Title */}
         <div className="flex items-center space-x-2 lg:space-x-4">

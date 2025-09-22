@@ -64,14 +64,18 @@ export function Sidebar({ selectedCategory, onCategoryChange, onUploadClick, onC
 
   const additionalItems = getAdditionalItems();
 
-  // Create sidebar items with real data
-  const sidebarItems = [
+  // Create sidebar items with real data - workflow only for authorized users
+  const baseSidebarItems = [
     { id: "all", label: "All Documents", icon: Home, count: stats.totalDocuments },
     { id: "recent", label: "Recent", icon: Clock, count: stats.recentDocuments },
-    { id: "starred", label: "Starred", icon: Star, count: 0 }, // TODO: Implement starred functionality
+    { id: "starred", label: "Starred", icon: Star, count: stats.starredDocuments },
     { id: "my-uploads", label: "My Uploads", icon: Upload, count: stats.myUploads },
-    { id: "workflow", label: "Workflow", icon: FileText, count: stats.workflowDocuments },
   ];
+
+  // Add workflow item only for users with workflow permissions
+  const sidebarItems = hasPermission('canViewWorkflow') 
+    ? [...baseSidebarItems, { id: "workflow", label: "Workflow", icon: FileText, count: stats.workflowDocuments }]
+    : baseSidebarItems;
 
   // Create categories with real data
   const categories = categoryConfig.map(category => ({

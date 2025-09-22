@@ -61,6 +61,8 @@ export interface Database {
           status: 'pending' | 'approved' | 'rejected' | 'published'
           user_id: string
           adviser_id: string
+          author_names: string | null
+          adviser_name: string | null
           pages: number | null
           file_size: string | null
           download_count: number
@@ -78,6 +80,8 @@ export interface Database {
           status?: 'pending' | 'approved' | 'rejected' | 'published'
           user_id: string
           adviser_id: string
+          author_names?: string | null
+          adviser_name?: string | null
           pages?: number | null
           file_size?: string | null
           download_count?: number
@@ -95,6 +99,8 @@ export interface Database {
           status?: 'pending' | 'approved' | 'rejected' | 'published'
           user_id?: string
           adviser_id?: string
+          author_names?: string | null
+          adviser_name?: string | null
           pages?: number | null
           file_size?: string | null
           download_count?: number

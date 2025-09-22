@@ -1,70 +1,61 @@
-# React + TypeScript + Vite
+# UBrary - University of Batangas Repository
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A comprehensive digital repository system for managing and accessing academic theses and capstone projects.
 
-Currently, two official plugins are available:
+## Features
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- **Document Management**: Upload, review, and publish academic works
+- **Role-based Access**: Student, Faculty, Librarian, and Admin roles
+- **Workflow System**: Structured submission and approval process
+- **Advanced Search**: Filter by program, year, keywords, and more
+- **Modern UI**: Responsive design with intuitive interface
 
-## Expanding the ESLint configuration
+## Tech Stack
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+- **Frontend**: React, TypeScript, Tailwind CSS
+- **Backend**: Supabase (PostgreSQL, Authentication, Storage)
+- **UI Components**: shadcn/ui
+- **Icons**: Lucide React
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+## Getting Started
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+1. Install dependencies:
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+   ```bash
+   npm install
+   ```
+
+2. Set up environment variables:
+
+   ```bash
+   cp env.example .env.local
+   ```
+
+3. Start development server:
+   ```bash
+   npm run dev
+   ```
+
+## Database Setup
+
+Run the SQL files in the `supabase/` directory in your Supabase dashboard:
+
+1. `schema.sql` - Main database schema
+2. `functions.sql` - Database functions
+3. `workflow_schema.sql` - Workflow management
+
+## Project Structure
+
+```
+src/
+├── components/     # UI components
+├── contexts/       # React contexts
+├── hooks/          # Custom hooks
+├── lib/            # Utilities and configurations
+├── services/       # API services
+└── types/          # TypeScript definitions
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## University of Batangas
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
-# Capstone---Ubrary
+Educational Excellence

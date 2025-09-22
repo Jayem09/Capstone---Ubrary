@@ -3,6 +3,8 @@ import { Card, CardContent, CardHeader, CardTitle } from './ui/card'
 import { Badge } from './ui/badge'
 import { Button } from './ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select'
+import { Input } from './ui/input'
 import { 
   FileText, 
   Clock, 
@@ -13,7 +15,11 @@ import {
   MessageSquare,
   Calendar,
   User,
-  RefreshCw
+  RefreshCw,
+  Settings,
+  Filter,
+  Download,
+  Search
 } from 'lucide-react'
 import { WorkflowService, type DocumentStatus } from '../services/workflowService'
 import { useAuth } from '../contexts/AuthContext'
@@ -85,7 +91,7 @@ const statusConfig = {
 }
 
 export function WorkflowDashboard() {
-  const { user } = useAuth()
+  const { user, hasPermission } = useAuth()
   const [documents, setDocuments] = useState<WorkflowDocument[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedStatus, setSelectedStatus] = useState<DocumentStatus | 'all'>('all')
@@ -97,6 +103,12 @@ export function WorkflowDashboard() {
     ready_for_publication: 0,
     published: 0
   })
+
+  // Advanced filtering for librarians
+  const [searchQuery, setSearchQuery] = useState('')
+  const [filterProgram, setFilterProgram] = useState('all')
+  const [filterDateRange, setFilterDateRange] = useState('all')
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false)
 
   const fetchDocuments = async (statusFilter?: DocumentStatus) => {
     if (!user) return
@@ -319,20 +331,131 @@ export function WorkflowDashboard() {
         <CardHeader>
           <CardTitle className="flex items-center justify-between">
             <span>Document Workflow</span>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                fetchDocuments(selectedStatus === 'all' ? undefined : selectedStatus as DocumentStatus)
-                fetchStatistics()
-              }}
-            >
-              <RefreshCw className="w-4 h-4 mr-2" />
-              Refresh
-            </Button>
+            <div className="flex items-center gap-2">
+              {/* Advanced Controls for Librarians */}
+              {hasPermission('canManageWorkflow') && (
+                <>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowAdvancedFilters(!showAdvancedFilters)}
+                  >
+                    <Filter className="w-4 h-4 mr-2" />
+                    {showAdvancedFilters ? 'Hide' : 'Show'} Filters
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      // Export functionality
+                      toast.info('Export feature coming soon')
+                    }}
+                  >
+                    <Download className="w-4 h-4 mr-2" />
+                    Export
+                  </Button>
+                </>
+              )}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  fetchDocuments(selectedStatus === 'all' ? undefined : selectedStatus as DocumentStatus)
+                  fetchStatistics()
+                }}
+              >
+                <RefreshCw className="w-4 h-4 mr-2" />
+                Refresh
+              </Button>
+            </div>
           </CardTitle>
         </CardHeader>
         <CardContent>
+          {/* Advanced Filters Panel for Librarians */}
+          {showAdvancedFilters && hasPermission('canManageWorkflow') && (
+            <div className="mb-6 p-4 bg-gray-50 rounded-lg border">
+              <h4 className="text-sm font-semibold mb-3 flex items-center">
+                <Settings className="w-4 h-4 mr-2" />
+                Advanced Workflow Management
+              </h4>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {/* Search */}
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    Search Documents
+                  </label>
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                    <Input
+                      placeholder="Search by title, author..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="pl-10"
+                    />
+                  </div>
+                </div>
+
+                {/* Program Filter */}
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    Filter by Program
+                  </label>
+                  <Select value={filterProgram} onValueChange={setFilterProgram}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="All Programs" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Programs</SelectItem>
+                      <SelectItem value="Information Technology">Information Technology</SelectItem>
+                      <SelectItem value="Engineering">Engineering</SelectItem>
+                      <SelectItem value="Business">Business</SelectItem>
+                      <SelectItem value="Education">Education</SelectItem>
+                      <SelectItem value="Nursing">Nursing</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Date Range Filter */}
+                <div>
+                  <label className="block text-xs font-medium text-gray-700 mb-1">
+                    Submission Date
+                  </label>
+                  <Select value={filterDateRange} onValueChange={setFilterDateRange}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="All Time" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Time</SelectItem>
+                      <SelectItem value="today">Today</SelectItem>
+                      <SelectItem value="week">This Week</SelectItem>
+                      <SelectItem value="month">This Month</SelectItem>
+                      <SelectItem value="quarter">This Quarter</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* Bulk Actions for Librarians */}
+              <div className="mt-4 pt-4 border-t">
+                <h5 className="text-xs font-semibold text-gray-700 mb-2">Bulk Actions</h5>
+                <div className="flex flex-wrap gap-2">
+                  <Button size="sm" variant="outline">
+                    <CheckCircle className="w-3 h-3 mr-1" />
+                    Bulk Approve
+                  </Button>
+                  <Button size="sm" variant="outline">
+                    <Edit className="w-3 h-3 mr-1" />
+                    Bulk Edit Metadata
+                  </Button>
+                  <Button size="sm" variant="outline">
+                    <Download className="w-3 h-3 mr-1" />
+                    Export Selected
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+
           <Tabs value={selectedStatus} onValueChange={(value) => setSelectedStatus(value as DocumentStatus | 'all')}>
             <TabsList className="grid w-full grid-cols-8">
               <TabsTrigger value="all">All</TabsTrigger>

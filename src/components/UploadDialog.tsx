@@ -28,7 +28,8 @@ export function UploadDialog({ isOpen, onClose }: UploadDialogProps) {
     year: "",
     abstract: "",
     keywords: "",
-    file: null as File | null
+    file: null as File | null,
+    thumbnail: null as File | null
   });
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -48,6 +49,28 @@ export function UploadDialog({ isOpen, onClose }: UploadDialogProps) {
       }
       setFormData({ ...formData, file });
       toast.success("File selected", {
+        description: `${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`
+      });
+    }
+  };
+
+  const handleThumbnailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (!file.type.startsWith("image/")) {
+        toast.error("Invalid file type", {
+          description: "Please upload an image file only"
+        });
+        return;
+      }
+      if (file.size > 5 * 1024 * 1024) { // 5MB limit for images
+        toast.error("Image too large", {
+          description: "Image size must be less than 5MB"
+        });
+        return;
+      }
+      setFormData({ ...formData, thumbnail: file });
+      toast.success("Thumbnail selected", {
         description: `${file.name} (${(file.size / 1024 / 1024).toFixed(2)} MB)`
       });
     }
@@ -105,10 +128,12 @@ export function UploadDialog({ isOpen, onClose }: UploadDialogProps) {
         program: formData.program,
         year: parseInt(formData.year),
         userId: user.id,
-        adviserId: undefined, // For now, leave adviser_id empty - in real app, this would be selected from a list
+        adviserId: undefined,
+        adviserName: formData.adviser.trim() || undefined,
         keywords: formData.keywords.split(',').map(k => k.trim()).filter(k => k),
         authors: formData.authors.split(',').map(a => a.trim()).filter(a => a),
-        file: formData.file
+        file: formData.file,
+        thumbnail: formData.thumbnail || undefined
       });
 
       if (result.error) {
@@ -132,7 +157,8 @@ export function UploadDialog({ isOpen, onClose }: UploadDialogProps) {
         year: "",
         abstract: "",
         keywords: "",
-        file: null
+        file: null,
+        thumbnail: null
       });
       setStep(1);
       resetUpload();
@@ -240,35 +266,85 @@ export function UploadDialog({ isOpen, onClose }: UploadDialogProps) {
 
       case 3:
         return (
-          <div className="space-y-4">
-            <h3 className="font-medium mb-4">Upload Document</h3>
-            <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
-              <input
-                type="file"
-                accept=".pdf"
-                onChange={handleFileChange}
-                className="hidden"
-                id="file-upload"
-              />
-              <label htmlFor="file-upload" className="cursor-pointer">
-                <Upload className="w-12 h-12 mx-auto text-gray-400 mb-4" />
-                <h4 className="font-medium text-gray-900 mb-2">
-                  {formData.file ? "File Selected" : "Upload PDF Document"}
-                </h4>
-                <p className="text-sm text-gray-500 mb-4">
-                  {formData.file 
-                    ? `${formData.file.name} (${(formData.file.size / 1024 / 1024).toFixed(2)} MB)`
-                    : "Click to browse or drag and drop your PDF file here"
-                  }
-                </p>
-                <Button type="button" variant="outline">
-                  {formData.file ? "Change File" : "Browse Files"}
-                </Button>
-              </label>
+          <div className="space-y-6">
+            <h3 className="font-medium mb-4">Upload Document & Thumbnail</h3>
+            
+            {/* PDF Upload */}
+            <div>
+              <Label className="text-sm font-medium mb-2 block">PDF Document *</Label>
+              <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
+                <input
+                  type="file"
+                  accept=".pdf"
+                  onChange={handleFileChange}
+                  className="hidden"
+                  id="file-upload"
+                />
+                <label htmlFor="file-upload" className="cursor-pointer">
+                  <Upload className="w-10 h-10 mx-auto text-gray-400 mb-3" />
+                  <h4 className="font-medium text-gray-900 mb-2">
+                    {formData.file ? "PDF Selected" : "Upload PDF Document"}
+                  </h4>
+                  <p className="text-sm text-gray-500 mb-3">
+                    {formData.file 
+                      ? `${formData.file.name} (${(formData.file.size / 1024 / 1024).toFixed(2)} MB)`
+                      : "Click to browse or drag and drop your PDF file here"
+                    }
+                  </p>
+                  <Button type="button" variant="outline" size="sm">
+                    {formData.file ? "Change PDF" : "Browse PDF"}
+                  </Button>
+                </label>
+              </div>
+              <p className="text-xs text-gray-500 mt-1">
+                Maximum file size: 50MB. Only PDF files are accepted.
+              </p>
             </div>
-            <p className="text-xs text-gray-500 text-center">
-              Maximum file size: 50MB. Only PDF files are accepted.
-            </p>
+
+            {/* Thumbnail Upload */}
+            <div>
+              <Label className="text-sm font-medium mb-2 block">Document Thumbnail (Optional)</Label>
+              <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
+                <input
+                  type="file"
+                  accept="image/*"
+                  onChange={handleThumbnailChange}
+                  className="hidden"
+                  id="thumbnail-upload"
+                />
+                <label htmlFor="thumbnail-upload" className="cursor-pointer">
+                  {formData.thumbnail ? (
+                    <div className="space-y-3">
+                      <img 
+                        src={URL.createObjectURL(formData.thumbnail)} 
+                        alt="Thumbnail preview" 
+                        className="w-24 h-32 object-cover mx-auto rounded border"
+                      />
+                      <p className="text-sm text-gray-600">
+                        {formData.thumbnail.name} ({(formData.thumbnail.size / 1024 / 1024).toFixed(2)} MB)
+                      </p>
+                      <Button type="button" variant="outline" size="sm">
+                        Change Thumbnail
+                      </Button>
+                    </div>
+                  ) : (
+                    <div>
+                      <Upload className="w-10 h-10 mx-auto text-gray-400 mb-3" />
+                      <h4 className="font-medium text-gray-900 mb-2">Upload Thumbnail Image</h4>
+                      <p className="text-sm text-gray-500 mb-3">
+                        Add a custom thumbnail image for your document
+                      </p>
+                      <Button type="button" variant="outline" size="sm">
+                        Browse Images
+                      </Button>
+                    </div>
+                  )}
+                </label>
+              </div>
+              <p className="text-xs text-gray-500 mt-1">
+                Maximum file size: 5MB. JPG, PNG, or WebP images accepted.
+              </p>
+            </div>
           </div>
         );
 

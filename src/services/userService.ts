@@ -195,9 +195,6 @@ export class UserService {
         .from('documents')
         .select(`
           *,
-          authors:document_authors(
-            users(id, first_name, last_name, email)
-          ),
           adviser:users!adviser_id(id, first_name, last_name, email),
           keywords:document_keywords(
             keywords(id, name)

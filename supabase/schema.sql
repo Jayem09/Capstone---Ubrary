@@ -322,3 +322,25 @@ BEGIN
     RETURN result;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Function to increment download count
+CREATE OR REPLACE FUNCTION increment_download_count(document_id UUID)
+RETURNS void AS $$
+BEGIN
+    UPDATE documents 
+    SET download_count = download_count + 1,
+        updated_at = NOW()
+    WHERE id = document_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Function to increment view count
+CREATE OR REPLACE FUNCTION increment_view_count(document_id UUID)
+RETURNS void AS $$
+BEGIN
+    UPDATE documents 
+    SET view_count = view_count + 1,
+        updated_at = NOW()
+    WHERE id = document_id;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;

@@ -144,35 +144,59 @@ export function useDocumentUpload() {
     year: number
     userId: string
     adviserId?: string
+    adviserName?: string
     keywords: string[]
     authors: string[]
     file?: File
+    thumbnail?: File
   }) => {
     setUploading(true)
     setUploadProgress(0)
     setError(null)
 
     try {
+      console.log('🔄 Starting document upload...', documentData.title)
+      
       // Simulate upload progress for UI feedback
       const progressInterval = setInterval(() => {
         setUploadProgress(prev => {
-          if (prev >= 90) {
+          if (prev >= 85) {
             clearInterval(progressInterval)
-            return 90
+            return 85 // Stop at 85% to show processing
           }
-          return prev + 10
+          return prev + 15
         })
-      }, 200)
+      }, 300)
 
-      const result = await DocumentService.createDocument(documentData)
+      // Set progress to processing state
+      setTimeout(() => {
+        clearInterval(progressInterval)
+        setUploadProgress(90)
+        console.log('🔄 Processing document...')
+      }, 1000)
 
-      clearInterval(progressInterval)
-      setUploadProgress(100)
+      // Add timeout to prevent hanging
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('Upload timed out after 30 seconds')), 30000)
+      })
+
+      const result = await Promise.race([
+        DocumentService.createDocument(documentData),
+        timeoutPromise
+      ]) as any
+
+      console.log('📄 Document creation result:', result)
 
       if (result.error) {
-        setError('Failed to upload document')
+        console.error('❌ Document creation failed:', result.error)
+        setError('Failed to upload document: ' + (result.error.message || 'Unknown error'))
+        setUploadProgress(0)
+        setUploading(false)
         return { data: null, error: result.error }
       }
+
+      console.log('✅ Document uploaded successfully!')
+      setUploadProgress(100)
 
       // Complete the progress
       setTimeout(() => {
@@ -181,11 +205,11 @@ export function useDocumentUpload() {
       }, 1000)
 
       return { data: result.data, error: null }
-    } catch (err) {
-      setError('An unexpected error occurred')
+    } catch (err: any) {
+      console.error('❌ Upload error:', err)
+      setError('Upload failed: ' + (err.message || 'An unexpected error occurred'))
       setUploading(false)
       setUploadProgress(0)
-      console.error('Error uploading document:', err)
       return { data: null, error: err }
     }
   }

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import { 
   BookOpen, 
   Download, 
@@ -73,6 +73,24 @@ export function DocumentViewer({ document, isOpen, onClose }: DocumentViewerProp
   const [showSidebar, setShowSidebar] = useState(false);
   const [viewMode, setViewMode] = useState<'single' | 'scroll'>('scroll');
 
+  // Memoize the PDF options to prevent unnecessary reloads
+  const pdfOptions = useMemo(() => ({
+    cMapUrl: 'https://unpkg.com/pdfjs-dist@3.11.174/cmaps/',
+    cMapPacked: true,
+    standardFontDataUrl: 'https://unpkg.com/pdfjs-dist@3.11.174/standard_fonts/',
+  }), []);
+
+  // Memoize callback functions to prevent unnecessary re-renders
+  const onDocumentLoadSuccess = useCallback(({ numPages }: { numPages: number }) => {
+    setNumPages(numPages);
+    setPageNumber(1);
+  }, []);
+
+  const onDocumentLoadError = useCallback((error: Error) => {
+    console.error('PDF load error:', error);
+    setPdfError('Failed to load PDF document');
+  }, []);
+
   // Update download count when document changes
   useEffect(() => {
     if (document) {
@@ -85,6 +103,18 @@ export function DocumentViewer({ document, isOpen, onClose }: DocumentViewerProp
     if (document && isOpen) {
       loadPdfUrl();
     }
+    
+    // Cleanup function to prevent memory leaks
+    return () => {
+      if (!isOpen) {
+        // Reset PDF state when closing
+        setPdfUrl(null);
+        setNumPages(null);
+        setPageNumber(1);
+        setPdfError(null);
+        setPdfLoading(false);
+      }
+    };
   }, [document, isOpen]);
 
   // Auto-hide toolbar after 3 seconds of inactivity
@@ -184,16 +214,6 @@ export function DocumentViewer({ document, isOpen, onClose }: DocumentViewerProp
     } catch (error) {
       toast.error("Download failed");
     }
-  };
-
-  const onDocumentLoadSuccess = ({ numPages }: { numPages: number }) => {
-    setNumPages(numPages);
-    setPageNumber(1);
-  };
-
-  const onDocumentLoadError = (error: Error) => {
-    console.error('PDF load error:', error);
-    setPdfError('Failed to load PDF document');
   };
 
   const changePage = (offset: number) => {
@@ -610,9 +630,6 @@ export function DocumentViewer({ document, isOpen, onClose }: DocumentViewerProp
           {pdfLoading ? (
             <div className="flex items-center justify-center h-full text-center text-white">
               <div>
-                <BookOpen className="w-20 h-20 mx-auto text-gray-400 mb-6 animate-pulse" />
-                <h4 className="text-xl font-semibold mb-3">Loading PDF...</h4>
-                <p className="text-gray-300">Please wait while we load the document</p>
               </div>
             </div>
           ) : pdfError ? (
@@ -633,19 +650,16 @@ export function DocumentViewer({ document, isOpen, onClose }: DocumentViewerProp
           ) : pdfUrl ? (
             <div className="w-full h-full overflow-auto">
               <PDFDocument
+                key={pdfUrl} // Force re-render when URL changes
                 file={pdfUrl}
                 onLoadSuccess={onDocumentLoadSuccess}
                 onLoadError={onDocumentLoadError}
-                options={{
-                  cMapUrl: 'https://unpkg.com/pdfjs-dist@3.11.174/cmaps/',
-                  cMapPacked: true,
-                  standardFontDataUrl: 'https://unpkg.com/pdfjs-dist@3.11.174/standard_fonts/',
-                }}
+                options={pdfOptions}
                 loading={
                   <div className="flex items-center justify-center h-full text-gray-500">
                     <div className="text-center">
                       <BookOpen className="w-16 h-16 mx-auto mb-4 animate-pulse" />
-                      <p className="text-sm">Loading PDF...</p>
+                      <p className="text-sm mt-80">Loading PDF...</p>
                     </div>
                   </div>
                 }
@@ -666,6 +680,9 @@ export function DocumentViewer({ document, isOpen, onClose }: DocumentViewerProp
                         renderTextLayer={true}
                         renderAnnotationLayer={true}
                         className="shadow-lg max-w-full max-h-full"
+                        onLoadError={(error) => {
+                          console.warn('Page load error:', error);
+                        }}
                       />
                     </div>
                   </div>
@@ -686,6 +703,9 @@ export function DocumentViewer({ document, isOpen, onClose }: DocumentViewerProp
                           renderTextLayer={true}
                           renderAnnotationLayer={true}
                           className="shadow-lg"
+                          onLoadError={(error) => {
+                            console.warn(`Page ${index + 1} load error:`, error);
+                          }}
                         />
                       </div>
                     ))}
