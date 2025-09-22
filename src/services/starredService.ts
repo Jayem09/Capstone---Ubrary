@@ -45,7 +45,7 @@ export class StarredService {
 
       if (error) {
         // Handle 406 Not Acceptable error (RLS policy issue)
-        if (error.code === 'PGRST301' || error.status === 406) {
+        if (error.code === 'PGRST301' || (error as any).status === 406) {
           console.warn('RLS policy issue with starred_documents - returning false')
           return false
         }
@@ -78,7 +78,7 @@ export class StarredService {
 
       if (error) {
         // Handle 406 Not Acceptable error (RLS policy issue)
-        if (error.code === 'PGRST301' || error.status === 406) {
+        if (error.code === 'PGRST301' || (error as any).status === 406) {
           console.warn('RLS policy issue with starred documents - returning empty array')
           return { data: [], error: null }
         }
@@ -112,7 +112,7 @@ export class StarredService {
 
       if (error) {
         // Handle 406 Not Acceptable error (RLS policy issue)
-        if (error.code === 'PGRST301' || error.status === 406) {
+        if (error.code === 'PGRST301' || (error as any).status === 406) {
           console.warn('RLS policy issue with starred documents count - returning 0')
           return 0
         }
@@ -145,7 +145,7 @@ export class StarredService {
 
       if (error) {
         // Handle 406 Not Acceptable error (RLS policy issue)
-        if (error.code === 'PGRST301' || error.status === 406) {
+        if (error.code === 'PGRST301' || (error as any).status === 406) {
           console.warn('RLS policy issue with starred documents status - returning empty map')
           const emptyMap: Record<string, boolean> = {}
           documentIds.forEach(id => {
