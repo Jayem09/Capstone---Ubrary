@@ -44,6 +44,11 @@ export class StarredService {
         .single()
 
       if (error) {
+        // Handle 406 Not Acceptable error (RLS policy issue)
+        if (error.code === 'PGRST301' || error.status === 406) {
+          console.warn('RLS policy issue with starred_documents - returning false')
+          return false
+        }
         // If table doesn't exist yet, return false silently
         if (error.code === 'PGRST205' || error.message?.includes('starred_documents')) {
           return false
@@ -72,6 +77,11 @@ export class StarredService {
       })
 
       if (error) {
+        // Handle 406 Not Acceptable error (RLS policy issue)
+        if (error.code === 'PGRST301' || error.status === 406) {
+          console.warn('RLS policy issue with starred documents - returning empty array')
+          return { data: [], error: null }
+        }
         // If function doesn't exist yet, return empty array silently
         if (error.code === 'PGRST202' || error.message?.includes('get_starred_documents')) {
           return { data: [], error: null }
@@ -101,6 +111,11 @@ export class StarredService {
         .eq('user_id', user.user.id)
 
       if (error) {
+        // Handle 406 Not Acceptable error (RLS policy issue)
+        if (error.code === 'PGRST301' || error.status === 406) {
+          console.warn('RLS policy issue with starred documents count - returning 0')
+          return 0
+        }
         // If table doesn't exist yet, return 0 silently
         if (error.code === 'PGRST205' || error.message?.includes('starred_documents')) {
           return 0
@@ -129,6 +144,15 @@ export class StarredService {
         .in('document_id', documentIds)
 
       if (error) {
+        // Handle 406 Not Acceptable error (RLS policy issue)
+        if (error.code === 'PGRST301' || error.status === 406) {
+          console.warn('RLS policy issue with starred documents status - returning empty map')
+          const emptyMap: Record<string, boolean> = {}
+          documentIds.forEach(id => {
+            emptyMap[id] = false
+          })
+          return emptyMap
+        }
         // If table doesn't exist yet, return empty map silently
         if (error.code === 'PGRST205' || error.message?.includes('starred_documents')) {
           const emptyMap: Record<string, boolean> = {}
