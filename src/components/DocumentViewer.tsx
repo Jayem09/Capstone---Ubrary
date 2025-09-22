@@ -72,6 +72,7 @@ export function DocumentViewer({ document, isOpen, onClose }: DocumentViewerProp
   const [showToolbar, setShowToolbar] = useState(true);
   const [showSidebar, setShowSidebar] = useState(false);
   const [viewMode, setViewMode] = useState<'single' | 'scroll'>('scroll');
+  const [inputPageNumber, setInputPageNumber] = useState('1');
 
   // Memoize the PDF options to prevent unnecessary reloads
   const pdfOptions = useMemo(() => ({
@@ -84,6 +85,7 @@ export function DocumentViewer({ document, isOpen, onClose }: DocumentViewerProp
   const onDocumentLoadSuccess = useCallback(({ numPages }: { numPages: number }) => {
     setNumPages(numPages);
     setPageNumber(1);
+    setInputPageNumber('1');
   }, []);
 
   const onDocumentLoadError = useCallback((error: Error) => {
@@ -140,6 +142,11 @@ export function DocumentViewer({ document, isOpen, onClose }: DocumentViewerProp
       };
     }
   }, [isOpen]);
+
+  // Sync input page number with actual page number
+  useEffect(() => {
+    setInputPageNumber(pageNumber.toString());
+  }, [pageNumber]);
 
   // Early return after all hooks
   if (!document) {
@@ -219,11 +226,45 @@ export function DocumentViewer({ document, isOpen, onClose }: DocumentViewerProp
   const changePage = (offset: number) => {
     setPageNumber(prevPageNumber => {
       const newPageNumber = prevPageNumber + offset;
-      if (newPageNumber >= 1 && newPageNumber <= (numPages || 1)) {
+      if (numPages && newPageNumber >= 1 && newPageNumber <= numPages) {
         return newPageNumber;
       }
       return prevPageNumber;
     });
+  };
+
+  const goToPage = (pageNum: number) => {
+    if (numPages && pageNum >= 1 && pageNum <= numPages) {
+      setPageNumber(pageNum);
+    }
+  };
+
+  const handlePageInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setInputPageNumber(value);
+    
+    const pageNum = parseInt(value, 10);
+    if (!isNaN(pageNum)) {
+      goToPage(pageNum);
+    }
+  };
+
+  const handlePageInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      const pageNum = parseInt(inputPageNumber, 10);
+      if (!isNaN(pageNum)) {
+        goToPage(pageNum);
+      } else {
+        setInputPageNumber(pageNumber.toString());
+      }
+    }
+  };
+
+  const handlePageInputBlur = () => {
+    const pageNum = parseInt(inputPageNumber, 10);
+    if (isNaN(pageNum) || !numPages || pageNum < 1 || pageNum > numPages) {
+      setInputPageNumber(pageNumber.toString());
+    }
   };
 
   const changeScale = (newScale: number) => {
@@ -443,9 +484,17 @@ export function DocumentViewer({ document, isOpen, onClose }: DocumentViewerProp
                   <ChevronLeft className="w-5 h-5" />
                 </Button>
                 
-                <div className="bg-white/20 rounded-lg px-4 py-2 min-w-0">
+                <div className="bg-white/20 rounded-lg px-4 py-2 min-w-0 flex items-center space-x-2">
+                  <input
+                    type="text"
+                    value={inputPageNumber}
+                    onChange={handlePageInputChange}
+                    onKeyDown={handlePageInputKeyDown}
+                    onBlur={handlePageInputBlur}
+                    className="bg-transparent text-sm font-medium w-12 text-center outline-none"
+                  />
                   <span className="text-sm font-medium">
-                    {pageNumber} of {numPages || '?'}
+                    of {numPages || '?'}
                   </span>
                 </div>
                 
@@ -630,6 +679,9 @@ export function DocumentViewer({ document, isOpen, onClose }: DocumentViewerProp
           {pdfLoading ? (
             <div className="flex items-center justify-center h-full text-center text-white">
               <div>
+                <BookOpen className="w-20 h-20 mx-auto text-gray-400 mb-6 animate-pulse" />
+                <h4 className="text-xl font-semibold mb-3">Loading PDF...</h4>
+                <p className="text-gray-300">Please wait while we load the document</p>
               </div>
             </div>
           ) : pdfError ? (
@@ -659,7 +711,7 @@ export function DocumentViewer({ document, isOpen, onClose }: DocumentViewerProp
                   <div className="flex items-center justify-center h-full text-gray-500">
                     <div className="text-center">
                       <BookOpen className="w-16 h-16 mx-auto mb-4 animate-pulse" />
-                      <p className="text-sm mt-80">Loading PDF...</p>
+                      <p className="text-sm">Loading PDF...</p>
                     </div>
                   </div>
                 }
