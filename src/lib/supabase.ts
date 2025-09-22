@@ -19,18 +19,7 @@ export const supabase = createClient(
   }
 )
 
-// Log configuration status in development
-if (import.meta.env.DEV) {
-  const status = supabaseConfig.isConfigured()
-  console.log('🔧 Supabase Configuration:', status ? '✅ Configured' : '⚠️ Using fallback values')
-  if (!status) {
-    console.log('📝 To configure Supabase:')
-    console.log('1. Create a .env.local file in your project root')
-    console.log('2. Add your Supabase URL and anon key:')
-    console.log('   VITE_SUPABASE_URL=https://your-project.supabase.co')
-    console.log('   VITE_SUPABASE_ANON_KEY=your-anon-key')
-  }
-}
+// Configuration is ready for use
 
 // Helper functions for common database operations
 export const supabaseHelpers = {

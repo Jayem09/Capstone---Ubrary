@@ -98,13 +98,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const initializeAuth = async () => {
     try {
-      console.log('🔧 Checking if user is logged in...');
       
       // Get current session
       const { data: { session } } = await supabase.auth.getSession();
       
       if (session?.user) {
-        console.log('✅ Found session for:', session.user.email);
         
         // Check if user exists in database
         const { data: dbUser, error: selectError } = await supabase
@@ -114,7 +112,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           .single();
         
         if (dbUser) {
-          console.log('🎉 User exists in DB - logging in!');
           
           // User exists in DB → LOGIN
           setAuthState({
@@ -137,11 +134,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             isLoading: false,
           });
         } else if (selectError) {
-          console.log('🔧 RLS blocking user query - logging in with session data');
-          console.log('🔍 Error details:', selectError);
           
           // RLS is blocking us from reading the user - login with session data directly
-          console.log('✅ Setting auth state with session data...');
           setAuthState({
               user: {
                 id: session.user.id,
@@ -161,10 +155,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               isAuthenticated: true,
               isLoading: false,
             });
-            console.log('🎉 Auth state set - user should be logged in!');
             return; // Exit early, don't try to create user
         } else {
-          console.log('⚠️ User has session but not in DB - creating profile...');
           
           // Create user profile from session metadata
           try {
@@ -183,7 +175,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
               });
 
             if (insertError) {
-              console.log('🔧 User creation failed, logging in with session data anyway');
               
               // If it's a duplicate key error, the user already exists but RLS is blocking us
               if (insertError.code === '23505') {
@@ -216,7 +207,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                 });
               }
             } else {
-              console.log('✅ User profile created - logging in!');
               
               // Login with session data
               setAuthState({
@@ -249,7 +239,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }
         }
       } else {
-        console.log('❌ No session found - need to login');
         setAuthState({
           user: null,
           isAuthenticated: false,
@@ -281,7 +270,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (error) {
         // If Supabase auth fails, fall back to mock authentication for development
-        console.log('Supabase auth failed, trying mock authentication:', error.message);
         
         const user = MOCK_USERS.find(u => u.email === email);
         if (user && password === 'password') {
@@ -343,7 +331,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         throw new Error('Registration failed - no user returned');
       }
 
-      console.log('✅ User registration successful:', authData.user.id);
 
       // The trigger should automatically create the user profile
       // Let's verify it was created
@@ -355,7 +342,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           .single();
 
         if (profileError) {
-          console.warn('Profile not found, creating manually:', profileError);
           
           // Manually create profile if trigger failed
           const { error: insertError } = await supabase
@@ -378,10 +364,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             throw new Error('Failed to create user profile: ' + insertError.message);
           }
         } else {
-          console.log('✅ User profile created successfully:', profile);
         }
       } catch (profileCheckError) {
-        console.warn('Could not verify profile creation:', profileCheckError);
         // Continue anyway - the trigger might have worked
       }
 
