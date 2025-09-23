@@ -10,11 +10,15 @@ export class DocumentService {
     category?: string
     search?: string
     userId?: string
+    includeUnpublished?: boolean
   }) {
     try {
       // Use development helper for better reliability in dev environment
       if (import.meta.env.DEV) {
-        const { data, error } = await devSupabaseHelpers.getDocumentsDev()
+        const { data, error } = await devSupabaseHelpers.getDocumentsDev({
+          userId: options?.userId,
+          includeUnpublished: options?.includeUnpublished
+        })
         
         if (error) {
           console.error('Error fetching documents (dev):', error)
@@ -51,11 +55,18 @@ export class DocumentService {
         }
         
         if (options?.search) {
-          const searchLower = options.search.toLowerCase()
-          filteredData = filteredData.filter(doc => 
-            doc.title.toLowerCase().includes(searchLower) ||
-            doc.abstract.toLowerCase().includes(searchLower)
-          )
+          const searchLower = options.search.toLowerCase().trim()
+          filteredData = filteredData.filter(doc => {
+            // Search across all metadata fields
+            const titleMatch = doc.title.toLowerCase().includes(searchLower)
+            const abstractMatch = doc.abstract.toLowerCase().includes(searchLower)
+            const programMatch = doc.program.toLowerCase().includes(searchLower)
+            const authorMatch = doc.author_names?.toLowerCase().includes(searchLower) || false
+            const adviserMatch = doc.adviser_name?.toLowerCase().includes(searchLower) || false
+            const yearMatch = doc.year.toString().includes(searchLower)
+            
+            return titleMatch || abstractMatch || programMatch || authorMatch || adviserMatch || yearMatch
+          })
         }
         
         if (options?.userId) {
@@ -523,11 +534,12 @@ export class DocumentService {
     }
   }
 
-  // Search documents with full-text search
+  // Search documents with enhanced full-text search
   static async searchDocuments(query: string) {
     try {
+      // Use enhanced search function that includes all metadata fields
       const { data, error } = await supabase.rpc('search_documents', {
-        search_query: query
+        search_query: query.trim()
       })
 
       if (error) {

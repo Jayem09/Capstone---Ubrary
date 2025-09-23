@@ -101,7 +101,7 @@ export function WorkflowStatusIndicator({
           const StepIcon = step.icon
           const isCompleted = index < currentIndex
           const isCurrent = index === currentIndex
-          const isPending = index > currentIndex
+          // const _isPending = index > currentIndex
 
           return (
             <React.Fragment key={step.status}>

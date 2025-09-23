@@ -112,13 +112,16 @@ export const devSupabaseHelpers = {
   },
 
   // Get documents without RLS restrictions (development only)
-  async getDocumentsDev() {
+  async getDocumentsDev(options?: {
+    includeUnpublished?: boolean
+    userId?: string
+  }) {
     if (import.meta.env.PROD) {
       throw new Error('Development helpers should not be used in production')
     }
 
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('documents')
         .select(`
           *,
@@ -128,8 +131,23 @@ export const devSupabaseHelpers = {
           ),
           files:document_files(*)
         `)
-        .order('created_at', { ascending: false })
 
+      // For "My Uploads", show all user documents regardless of status
+      if (options?.userId && options?.includeUnpublished) {
+        query = query.eq('user_id', options.userId)
+      } 
+      // For "All Documents", only show published documents
+      else if (options?.userId) {
+        query = query.eq('user_id', options.userId).eq('status', 'published')
+      } 
+      // For general document listing, only show published
+      else {
+        query = query.eq('status', 'published')
+      }
+
+      query = query.order('created_at', { ascending: false })
+
+      const { data, error } = await query
       return { data, error }
     } catch (error) {
       console.error('Error in getDocumentsDev:', error)

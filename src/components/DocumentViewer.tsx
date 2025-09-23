@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
 import { 
   BookOpen, 
   Download, 
@@ -17,13 +17,16 @@ import {
   Facebook, 
   Twitter, 
   Mail,
-  FileText
+  FileText,
+  Quote,
+  Check
 } from "lucide-react";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
 import { toast } from "sonner";
 import { Document as PDFDocument, Page as PDFPage, pdfjs } from 'react-pdf';
 import { DocumentService } from "../services/documentService";
+import { CitationGenerator } from "../utils/citationGenerator";
 import { Popover, PopoverContent, PopoverTrigger } from "./ui/popover";
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
@@ -57,9 +60,10 @@ interface DocumentViewerProps {
   document: Document | null;
   isOpen: boolean;
   onClose: () => void;
+  fullscreen?: boolean; // New prop for fullscreen mode
 }
 
-export function DocumentViewer({ document, isOpen, onClose }: DocumentViewerProps) {
+export function DocumentViewer({ document, isOpen, onClose, fullscreen = false }: DocumentViewerProps) {
   const [downloadCount, setDownloadCount] = useState(0);
   const [pdfUrl, setPdfUrl] = useState<string | null>(null);
   const [pdfLoading, setPdfLoading] = useState(false);
@@ -69,10 +73,14 @@ export function DocumentViewer({ document, isOpen, onClose }: DocumentViewerProp
   const [scale, setScale] = useState(1.0);
   const [rotation, setRotation] = useState(0);
   const [isStarred, setIsStarred] = useState(false);
+  const [showCitation, setShowCitation] = useState(false);
+  const [citationFormat, setCitationFormat] = useState<'APA' | 'MLA' | 'Chicago' | 'BibTeX'>('APA');
+  const [citationCopied, setCitationCopied] = useState(false);
   const [showToolbar, setShowToolbar] = useState(true);
   const [showSidebar, setShowSidebar] = useState(false);
   const [viewMode, setViewMode] = useState<'single' | 'scroll'>('scroll');
   const [inputPageNumber, setInputPageNumber] = useState('1');
+  const citationPanelRef = useRef<HTMLDivElement>(null);
 
   // Memoize the PDF options to prevent unnecessary reloads
   const pdfOptions = useMemo(() => ({
@@ -100,10 +108,38 @@ export function DocumentViewer({ document, isOpen, onClose }: DocumentViewerProp
     }
   }, [document]);
 
+  // Handle click outside citation panel
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (citationPanelRef.current && !citationPanelRef.current.contains(event.target as Node)) {
+        setShowCitation(false);
+      }
+    };
+
+    if (showCitation) {
+      window.document.addEventListener('mousedown', handleClickOutside);
+    }
+
+    return () => {
+      window.document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showCitation]);
+
   // Load PDF URL when document changes
   useEffect(() => {
     if (document && isOpen) {
       loadPdfUrl();
+      // Prevent background scrolling and interaction
+      window.document.body.style.overflow = 'hidden';
+      window.document.body.style.position = 'fixed';
+      window.document.body.style.width = '100%';
+      window.document.body.style.height = '100%';
+    } else if (!isOpen) {
+      // Restore background scrolling when closed
+      window.document.body.style.overflow = '';
+      window.document.body.style.position = '';
+      window.document.body.style.width = '';
+      window.document.body.style.height = '';
     }
     
     // Cleanup function to prevent memory leaks
@@ -116,6 +152,11 @@ export function DocumentViewer({ document, isOpen, onClose }: DocumentViewerProp
         setPdfError(null);
         setPdfLoading(false);
       }
+      // Always restore body styles on cleanup
+      window.document.body.style.overflow = '';
+      window.document.body.style.position = '';
+      window.document.body.style.width = '';
+      window.document.body.style.height = '';
     };
   }, [document, isOpen]);
 
@@ -148,6 +189,20 @@ export function DocumentViewer({ document, isOpen, onClose }: DocumentViewerProp
     setInputPageNumber(pageNumber.toString());
   }, [pageNumber]);
 
+  // Handle escape key to close viewer
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && isOpen) {
+        onClose();
+      }
+    };
+
+    if (isOpen) {
+      window.document.addEventListener('keydown', handleEscape);
+      return () => window.document.removeEventListener('keydown', handleEscape);
+    }
+  }, [isOpen, onClose]);
+
   // Early return after all hooks
   if (!document) {
     return null;
@@ -156,47 +211,60 @@ export function DocumentViewer({ document, isOpen, onClose }: DocumentViewerProp
   const loadPdfUrl = async () => {
     if (!document) return;
     
+    console.log('🔍 Loading PDF for document:', document.id);
     setPdfLoading(true);
     setPdfError(null);
     
     try {
-      const filePathResult = await DocumentService.getDocumentFilePath(document.id);
-      
-      if (filePathResult.data && filePathResult.data.file_path) {
-        const result = await DocumentService.getDocumentFileUrl(filePathResult.data.file_path);
-        if (result.data && result.data.signedUrl) {
-          setPdfUrl(result.data.signedUrl);
-          return;
-        }
-      }
-      
-      // Fallback paths
-      const possiblePaths = [
-        `documents/${document.id}/${document.id}.pdf`,
-        `documents/${document.id}/${document.id}.PDF`,
-        `documents/${document.id}/${document.title}.pdf`,
-        `documents/${document.id}/${document.title}.PDF`
-      ];
-      
-      let foundUrl = null;
-      for (const filePath of possiblePaths) {
-        try {
-          const result = await DocumentService.getDocumentFileUrl(filePath);
+      // Add timeout to prevent infinite loading
+      const timeoutPromise = new Promise((_, reject) => {
+        setTimeout(() => reject(new Error('PDF loading timeout')), 10000); // 10 second timeout
+      });
+
+      const loadPromise = (async () => {
+        const filePathResult = await DocumentService.getDocumentFilePath(document.id);
+        
+        if (filePathResult.data && filePathResult.data.file_path) {
+          const result = await DocumentService.getDocumentFileUrl(filePathResult.data.file_path);
           if (result.data && result.data.signedUrl) {
-            foundUrl = result.data.signedUrl;
-            break;
+            console.log('✅ Found PDF at primary path');
+            return result.data.signedUrl;
           }
-        } catch (pathError) {
-          continue;
         }
-      }
+        
+        // Fallback paths with shorter timeout per attempt
+        const possiblePaths = [
+          `documents/${document.id}/${document.id}.pdf`,
+          `documents/${document.id}/${document.id}.PDF`,
+          `documents/${document.id}/${document.title}.pdf`,
+          `documents/${document.id}/${document.title}.PDF`
+        ];
+        
+        for (const filePath of possiblePaths) {
+          try {
+            console.log('🔍 Trying path:', filePath);
+            const result = await Promise.race([
+              DocumentService.getDocumentFileUrl(filePath),
+              new Promise((_, reject) => setTimeout(() => reject(new Error('Path timeout')), 2000))
+            ]) as any;
+            if (result?.data && result.data.signedUrl) {
+              console.log('✅ Found PDF at fallback path:', filePath);
+              return result.data.signedUrl;
+            }
+          } catch (pathError: any) {
+            console.log('❌ Path failed:', filePath, pathError?.message || 'Unknown error');
+            continue;
+          }
+        }
+        
+        throw new Error('No PDF found');
+      })();
+
+      const pdfUrl = await Promise.race([loadPromise, timeoutPromise]);
+      setPdfUrl(pdfUrl);
       
-      if (foundUrl) {
-        setPdfUrl(foundUrl);
-      } else {
-        setPdfUrl(SAMPLE_PDF_DATA);
-      }
-    } catch (error) {
+    } catch (error: any) {
+      console.log('⚠️ PDF loading failed, using sample PDF:', error?.message || 'Unknown error');
       setPdfUrl(SAMPLE_PDF_DATA);
     } finally {
       setPdfLoading(false);
@@ -325,11 +393,61 @@ export function DocumentViewer({ document, isOpen, onClose }: DocumentViewerProp
     }
   };
 
+  // Citation generation functions
+  const generateCitation = (format: 'APA' | 'MLA' | 'Chicago' | 'BibTeX'): string => {
+    try {
+      if (!document) {
+        return 'No document available for citation generation.';
+      }
+
+      const citationData = {
+        id: document.id,
+        title: document.title || 'Untitled Document',
+        author_names: document.authors?.join(', ') || 'Unknown Author',
+        adviser_name: document.adviser || null,
+        program: document.program || 'Unknown Program',
+        year: document.year || new Date().getFullYear(),
+        created_at: document.dateAdded || new Date().toISOString(),
+        published_at: null, // We don't have publishedAt in the Document interface
+        pages: null // We don't have pages in the Document interface
+      };
+
+      switch (format) {
+        case 'APA':
+          return CitationGenerator.generateAPA(citationData);
+        case 'MLA':
+          return CitationGenerator.generateMLA(citationData);
+        case 'Chicago':
+          return CitationGenerator.generateChicago(citationData);
+        case 'BibTeX':
+          return CitationGenerator.generateBibTeX(citationData);
+        default:
+          return CitationGenerator.generateAPA(citationData);
+      }
+    } catch (error) {
+      console.error('Error generating citation:', error);
+      return 'Error generating citation. Please try again.';
+    }
+  };
+
+  const handleCopyCitation = async () => {
+    const citation = generateCitation(citationFormat);
+    const success = await CitationGenerator.copyToClipboard(citation);
+    
+    if (success) {
+      setCitationCopied(true);
+      toast.success(`${citationFormat} citation copied to clipboard!`);
+      setTimeout(() => setCitationCopied(false), 2000);
+    } else {
+      toast.error("Failed to copy citation");
+    }
+  };
+
   if (!isOpen) return null;
 
   return (
     <div 
-      className="fixed inset-0 z-50 w-screen h-screen bg-black overflow-hidden"
+      className={`fixed inset-0 w-screen h-screen bg-black overflow-hidden ${fullscreen ? 'z-[9999]' : 'z-50'}`}
       style={{ 
         width: '100vw', 
         height: '100vh',
@@ -337,8 +455,14 @@ export function DocumentViewer({ document, isOpen, onClose }: DocumentViewerProp
         top: 0,
         left: 0,
         right: 0,
-        bottom: 0
+        bottom: 0,
+        margin: 0,
+        padding: 0,
+        zIndex: 999999, // Maximum z-index to ensure it's above everything
+        isolation: 'isolate' // Create new stacking context
       }}
+      onClick={(e) => e.stopPropagation()} // Prevent any click-through
+      onKeyDown={(e) => e.stopPropagation()} // Prevent any key events from bubbling
     >
         {/* Floating Toolbar - Top */}
         <div className={`absolute top-0 left-0 right-0 z-50 transition-all duration-300 ${
@@ -386,6 +510,86 @@ export function DocumentViewer({ document, isOpen, onClose }: DocumentViewerProp
                   <StarOff className="w-5 h-5" />
                 )}
               </Button>
+
+              {/* Citation Button */}
+              <div className="relative" ref={citationPanelRef}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-gray-300 hover:text-white hover:bg-white/20"
+                  onClick={() => setShowCitation(!showCitation)}
+                >
+                  <Quote className="w-5 h-5" />
+                </Button>
+                
+                {/* Citation Panel */}
+                {showCitation && (
+                  <>
+                    {/* Backdrop */}
+                    <div 
+                      className="fixed inset-0 bg-black/20 z-[9998]"
+                      onClick={() => setShowCitation(false)}
+                    />
+                    {/* Panel */}
+                    <div className="fixed top-20 right-4 w-96 max-w-[calc(100vw-2rem)] p-4 bg-white border border-gray-200 rounded-lg shadow-xl z-[9999] animate-in slide-in-from-top-2 duration-200">
+                    <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <h3 className="font-semibold text-lg">Generate Citation</h3>
+                      <button
+                        onClick={() => setShowCitation(false)}
+                        className="p-1 hover:bg-gray-100 rounded-md transition-colors"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                    
+                    {/* Format Selection */}
+                    <div className="flex flex-wrap gap-2">
+                      {(['APA', 'MLA', 'Chicago', 'BibTeX'] as const).map((format) => (
+                        <button
+                          key={format}
+                          onClick={() => setCitationFormat(format)}
+                          className={`text-sm font-medium px-3 py-2 rounded-md border transition-colors ${
+                            citationFormat === format 
+                              ? 'bg-blue-600 text-white hover:bg-blue-700 border-blue-600' 
+                              : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
+                          }`}
+                        >
+                          {format}
+                        </button>
+                      ))}
+                    </div>
+                    
+                    {/* Citation Preview */}
+                    <div className="bg-gray-50 p-4 rounded-md border max-h-32 overflow-y-auto">
+                      <p className="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap font-mono">
+                        {generateCitation(citationFormat) || 'Loading citation...'}
+                      </p>
+                    </div>
+                    
+                    {/* Copy Button */}
+                    <button
+                      onClick={handleCopyCitation}
+                      className="w-full bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded-md border border-green-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      disabled={citationCopied}
+                    >
+                      {citationCopied ? (
+                        <>
+                          <Check className="w-4 h-4 mr-2" />
+                          Copied!
+                        </>
+                      ) : (
+                        <>
+                          <Copy className="w-4 h-4 mr-2" />
+                          Copy {citationFormat} Citation
+                        </>
+                      )}
+                    </button>
+                    </div>
+                    </div>
+                  </>
+                )}
+              </div>
 
               {/* Share Button */}
               <Popover>

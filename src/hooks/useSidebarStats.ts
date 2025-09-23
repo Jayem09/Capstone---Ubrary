@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { StarredService } from '../services/starredService'
+import { useSidebarStatsContext } from '../contexts/SidebarStatsContext'
 
 export interface SidebarStats {
   totalDocuments: number
@@ -35,6 +36,7 @@ export function useSidebarStats() {
   const [error, setError] = useState<string | null>(null)
 
   const { user } = useAuth()
+  const { refreshTrigger } = useSidebarStatsContext()
 
   const fetchStats = async () => {
     if (!user) {
@@ -136,7 +138,7 @@ export function useSidebarStats() {
 
   useEffect(() => {
     fetchStats()
-  }, [user])
+  }, [user, refreshTrigger]) // Add refreshTrigger to dependencies
 
   return {
     stats,

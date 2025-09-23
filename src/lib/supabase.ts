@@ -30,6 +30,7 @@ export const supabaseHelpers = {
     category?: string
     search?: string
     userId?: string
+    includeUnpublished?: boolean
   }) {
     let query = supabase
       .from('documents')
@@ -44,15 +45,33 @@ export const supabaseHelpers = {
         ),
         files:document_files(*)
       `)
-      .eq('status', 'published')
-      .order('created_at', { ascending: false })
+
+    // For "My Uploads", show all user documents regardless of status
+    if (options?.userId && options?.includeUnpublished) {
+      // Don't filter by status - show all user documents
+    } 
+    // For all other cases, only show published documents
+    else {
+      query = query.eq('status', 'published')
+    }
+
+    query = query.order('created_at', { ascending: false })
 
     if (options?.category && options.category !== 'all') {
       query = query.eq('program', options.category)
     }
 
     if (options?.search) {
-      query = query.or(`title.ilike.%${options.search}%,abstract.ilike.%${options.search}%`)
+      // Comprehensive search across all metadata fields
+      const searchTerm = options.search.trim()
+      query = query.or(`
+        title.ilike.%${searchTerm}%,
+        abstract.ilike.%${searchTerm}%,
+        program.ilike.%${searchTerm}%,
+        author_names.ilike.%${searchTerm}%,
+        adviser_name.ilike.%${searchTerm}%,
+        year.eq.${isNaN(Number(searchTerm)) ? '0' : searchTerm}
+      `.replace(/\s+/g, ''))
     }
 
     if (options?.userId) {

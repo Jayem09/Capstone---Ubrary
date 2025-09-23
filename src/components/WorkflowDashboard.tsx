@@ -23,7 +23,9 @@ import {
 } from 'lucide-react'
 import { WorkflowService, type DocumentStatus } from '../services/workflowService'
 import { useAuth } from '../contexts/AuthContext'
+import { useSidebarStatsContext } from '../contexts/SidebarStatsContext'
 import { toast } from 'sonner'
+import { WorkflowActionsDropdown } from './WorkflowActionsDropdown'
 
 interface WorkflowDocument {
   id: string
@@ -37,6 +39,10 @@ interface WorkflowDocument {
   created_at: string
   updated_at: string
   workflow_position: number
+}
+
+interface WorkflowDashboardProps {
+  onDocumentView?: (document: any) => void
 }
 
 const statusConfig = {
@@ -90,8 +96,9 @@ const statusConfig = {
   }
 }
 
-export function WorkflowDashboard() {
+export function WorkflowDashboard({ onDocumentView }: WorkflowDashboardProps) {
   const { user, hasPermission } = useAuth()
+  const { triggerRefresh } = useSidebarStatsContext()
   const [documents, setDocuments] = useState<WorkflowDocument[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedStatus, setSelectedStatus] = useState<DocumentStatus | 'all'>('all')
@@ -109,6 +116,8 @@ export function WorkflowDashboard() {
   const [filterProgram, setFilterProgram] = useState('all')
   const [filterDateRange, setFilterDateRange] = useState('all')
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false)
+
+  // Document viewer is now handled by the App component
 
   const fetchDocuments = async (statusFilter?: DocumentStatus) => {
     if (!user) return
@@ -164,8 +173,80 @@ export function WorkflowDashboard() {
     fetchDocuments(selectedStatus === 'all' ? undefined : selectedStatus as DocumentStatus)
   }, [selectedStatus])
 
+  // Convert WorkflowDocument to DocumentViewer format
+  const convertToViewerDocument = (workflowDoc: WorkflowDocument) => {
+    return {
+      id: workflowDoc.id,
+      title: workflowDoc.title,
+      authors: workflowDoc.author_names ? workflowDoc.author_names.split(', ') : ['Unknown Author'],
+      year: workflowDoc.year,
+      program: workflowDoc.program,
+      adviser: 'Unknown Adviser', // We don't have this in WorkflowDocument
+      abstract: workflowDoc.abstract,
+      keywords: [], // We don't have this in WorkflowDocument
+      downloadCount: 0,
+      dateAdded: workflowDoc.created_at,
+      fileSize: 'Unknown',
+      pages: 0,
+      thumbnail: ''
+    }
+  }
+
+  const handleStartReview = async (document: WorkflowDocument) => {
+    if (!user) {
+      toast.error('User not authenticated')
+      return
+    }
+
+    console.log('🔄 Starting review for document:', document.id)
+
+    try {
+      // First, update the status
+      const result = await WorkflowService.updateDocumentStatus(
+        document.id,
+        'under_review',
+        user.id,
+        'Review started'
+      )
+
+      console.log('📊 Status change result:', result)
+
+      if (result.error) {
+        console.error('❌ Status change failed:', result.error)
+        toast.error('Failed to update document status: ' + ((result.error as any)?.message || 'Unknown error'))
+        return
+      }
+
+      console.log('✅ Status change successful')
+      
+      // Refresh the documents list
+      await fetchDocuments(selectedStatus === 'all' ? undefined : selectedStatus as DocumentStatus)
+      await fetchStatistics()
+      
+      // Open the document for review
+      const viewerDocument = convertToViewerDocument(document)
+      // Trigger sidebar stats refresh
+      triggerRefresh()
+      
+      // Open document viewer if callback is provided
+      if (onDocumentView) {
+        onDocumentView(viewerDocument)
+      }
+      
+      console.log('📋 Documents refreshed, sidebar stats triggered, and viewer opened')
+    } catch (error) {
+      console.error('💥 Unexpected error starting review:', error)
+      toast.error('An unexpected error occurred while starting review')
+    }
+  }
+
   const handleStatusChange = async (documentId: string, newStatus: DocumentStatus, reason?: string) => {
-    if (!user) return
+    if (!user) {
+      toast.error('User not authenticated')
+      return
+    }
+
+    console.log('🔄 Starting status change:', { documentId, newStatus, userId: user.id, reason })
 
     try {
       const result = await WorkflowService.updateDocumentStatus(
@@ -175,15 +256,27 @@ export function WorkflowDashboard() {
         reason
       )
 
+      console.log('📊 Status change result:', result)
+
       if (result.error) {
+        console.error('❌ Status change failed:', result.error)
+        toast.error('Failed to update document status: ' + ((result.error as any)?.message || 'Unknown error'))
         return
       }
 
+      console.log('✅ Status change successful')
+      
       // Refresh the documents list
-      fetchDocuments(selectedStatus === 'all' ? undefined : selectedStatus as DocumentStatus)
-      fetchStatistics()
+      await fetchDocuments(selectedStatus === 'all' ? undefined : selectedStatus as DocumentStatus)
+      await fetchStatistics()
+      
+      // Trigger sidebar stats refresh
+      triggerRefresh()
+      
+      console.log('📋 Documents refreshed and sidebar stats triggered')
     } catch (error) {
-      console.error('Error updating status:', error)
+      console.error('💥 Unexpected error updating status:', error)
+      toast.error('An unexpected error occurred while updating status')
     }
   }
 
@@ -202,7 +295,7 @@ export function WorkflowDashboard() {
               key="start-review"
               size="sm"
               variant="outline"
-              onClick={() => handleStatusChange(document.id, 'under_review', 'Review started')}
+              onClick={() => handleStartReview(document)}
             >
               Start Review
             </Button>
@@ -214,12 +307,21 @@ export function WorkflowDashboard() {
         if (user?.role === 'faculty' || user?.role === 'librarian' || user?.role === 'admin') {
           actions.push(
             <Button
-              key="approve"
+              key="approve-publish"
               size="sm"
               className="bg-green-600 hover:bg-green-700"
-              onClick={() => handleStatusChange(document.id, 'approved', 'Document approved')}
+              onClick={() => handleStatusChange(document.id, 'published', 'Document approved and published')}
             >
-              Approve
+              Approve & Publish
+            </Button>,
+            <Button
+              key="approve-curation"
+              size="sm"
+              variant="outline"
+              className="border-green-500 text-green-600 hover:bg-green-50"
+              onClick={() => handleStatusChange(document.id, 'approved', 'Document approved for curation')}
+            >
+              Approve for Curation
             </Button>,
             <Button
               key="needs-revision"
@@ -533,11 +635,23 @@ export function WorkflowDashboard() {
                               </div>
                             </div>
                             
-                            {actions.length > 0 && (
-                              <div className="flex items-center space-x-2 ml-4">
-                                {actions}
-                              </div>
-                            )}
+                            <div className="flex items-center space-x-2 ml-4">
+                              {actions.length > 0 && actions}
+                              <WorkflowActionsDropdown
+                                document={document}
+                                onView={() => {
+                                  const viewerDocument = convertToViewerDocument(document)
+                                  if (onDocumentView) {
+                                    onDocumentView(viewerDocument)
+                                  }
+                                }}
+                                onStartReview={() => handleStartReview(document)}
+                                onApprove={() => handleStatusChange(document.id, 'published', 'Document approved and published')}
+                                onReject={() => handleStatusChange(document.id, 'rejected', 'Document rejected')}
+                                onRequestRevision={() => handleStatusChange(document.id, 'needs_revision', 'Document needs revision')}
+                                userRole={user?.role as any}
+                              />
+                            </div>
                           </div>
                         </CardContent>
                       </Card>
@@ -549,6 +663,8 @@ export function WorkflowDashboard() {
           </Tabs>
         </CardContent>
       </Card>
+
+      {/* Document Viewer is now handled by the App component for fullscreen mode */}
     </div>
   )
 }

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { 
   Users, 
   FileText, 
@@ -22,7 +22,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
 // import { SystemSettings } from './SystemSettings';
 // import { AnalyticsDashboard } from './AnalyticsDashboard';
 import { toast } from 'sonner';
-import { DocumentService } from '../services/documentService';
 
 export function AdminDashboard() {
   const [activeTab, setActiveTab] = useState('overview');

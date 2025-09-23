@@ -28,9 +28,10 @@ interface DocumentCardProps {
   document: Document;
   onDocumentView: (document: Document) => void;
   onDownloadUpdate?: (documentId: string, newCount: number) => void;
+  isLoadingThumbnail?: boolean;
 }
 
-export function DocumentCard({ document, onDocumentView, onDownloadUpdate }: DocumentCardProps) {
+export function DocumentCard({ document, onDocumentView, onDownloadUpdate, isLoadingThumbnail = false }: DocumentCardProps) {
   const [isStarred, setIsStarred] = useState(false);
   const [downloadCount, setDownloadCount] = useState(document.downloadCount);
   const [isDownloading, setIsDownloading] = useState(false);
@@ -174,6 +175,8 @@ export function DocumentCard({ document, onDocumentView, onDownloadUpdate }: Doc
           src={document.thumbnail}
           alt={document.title}
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+          showSkeleton={isLoadingThumbnail}
+          lazy={true}
         />
         <div className="absolute inset-0 bg-gradient-to-t from-black/50 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-200" />
         

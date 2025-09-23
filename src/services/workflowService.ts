@@ -77,7 +77,16 @@ export class WorkflowService {
     comments?: string
   ) {
     try {
-      const { error } = await supabase.rpc('update_document_status_with_history', {
+      console.log('🔧 WorkflowService.updateDocumentStatus called with:', {
+        documentId,
+        newStatus,
+        changedBy,
+        reason,
+        comments
+      })
+
+      // First, check if the RPC function exists by trying to call it
+      const { data, error } = await supabase.rpc('update_document_status_with_history', {
         document_id_param: documentId,
         new_status: newStatus,
         changed_by_param: changedBy,
@@ -85,8 +94,45 @@ export class WorkflowService {
         comments_param: comments
       })
 
+      console.log('📡 RPC call result:', { data, error })
+
       if (error) {
-        console.error('Error updating document status:', error)
+        console.error('❌ RPC Error details:', {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code
+        })
+
+        // If RPC function doesn't exist or has type issues, try direct update as fallback
+        if (error.code === 'PGRST202' || 
+            error.code === '42804' || // Type casting error
+            error.message?.includes('function') || 
+            error.message?.includes('does not exist') ||
+            error.message?.includes('document_status') ||
+            error.message?.includes('cast')) {
+          
+          console.log('🔄 RPC function issue detected, trying direct update fallback...', error.code)
+          
+          const { error: updateError } = await supabase
+            .from('documents')
+            .update({ 
+              status: newStatus,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', documentId)
+
+          if (updateError) {
+            console.error('❌ Direct update also failed:', updateError)
+            toast.error('Failed to update document status')
+            return { data: null, error: updateError }
+          }
+
+          console.log('✅ Direct update successful')
+          toast.success(`Document status updated to ${newStatus}`)
+          return { data: null, error: null }
+        }
+
         toast.error('Failed to update document status')
         return { data: null, error }
       }
@@ -95,17 +141,18 @@ export class WorkflowService {
         pending: 'submitted for review',
         under_review: 'moved to review',
         needs_revision: 'marked for revision',
-        approved: 'approved',
+        approved: 'approved for curation',
         curation: 'moved to curation',
         ready_for_publication: 'ready for publication',
-        published: 'published',
+        published: 'approved and published - now visible to all users',
         rejected: 'rejected'
       }
 
+      console.log('✅ Status update successful')
       toast.success(`Document ${statusLabels[newStatus]}`)
       return { data: null, error: null }
     } catch (error) {
-      console.error('Error in updateDocumentStatus:', error)
+      console.error('💥 Unexpected error in updateDocumentStatus:', error)
       toast.error('An unexpected error occurred')
       return { data: null, error }
     }

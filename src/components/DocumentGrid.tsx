@@ -5,6 +5,7 @@ import { Search } from "lucide-react";
 import { useDocuments } from "../hooks/useDocuments";
 import { DocumentService } from "../services/documentService";
 import { StarredService } from "../services/starredService";
+import { ImageService } from "../services/imageService";
 import { useAuth } from "../contexts/AuthContext";
 import type { Document as DBDocument } from "../types/database";
 
@@ -68,32 +69,103 @@ interface ExtendedDBDocument extends DBDocument {
 
 // Mock data removed - now using real data from Supabase
 
-// Hook to manage thumbnail URLs
+// Cache for thumbnail URLs to avoid refetching
+const thumbnailCache = new Map<string, { url: string; expires: number }>();
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+
+// Hook to manage thumbnail URLs with caching and batching
 function useThumbnailUrls(documents: ExtendedDBDocument[]) {
   const [thumbnailUrls, setThumbnailUrls] = useState<Record<string, string>>({});
+  const [loadingThumbnails, setLoadingThumbnails] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     const fetchThumbnailUrls = async () => {
-      const urls: Record<string, string> = {};
+      const urlsToFetch: { docId: string; filePath: string }[] = [];
+      const cachedUrls: Record<string, string> = {};
       
+      // Check cache first and prepare batch fetch list
       for (const doc of documents) {
         const thumbnailFile = doc.files?.find(file => 
           !file.is_primary && file.file_type.startsWith('image/')
         );
         
         if (thumbnailFile) {
-          try {
-            const result = await DocumentService.getDocumentFileUrl(thumbnailFile.file_path);
-            if (result.data?.signedUrl) {
-              urls[doc.id] = result.data.signedUrl;
-            }
-          } catch (error) {
-            console.warn(`Failed to get thumbnail URL for document ${doc.id}:`, error);
+          const cached = thumbnailCache.get(doc.id);
+          if (cached && cached.expires > Date.now()) {
+            // Use cached URL
+            cachedUrls[doc.id] = cached.url;
+          } else {
+            // Add to fetch list
+            urlsToFetch.push({ docId: doc.id, filePath: thumbnailFile.file_path });
           }
         }
       }
-      
-      setThumbnailUrls(urls);
+
+      // Set cached URLs immediately
+      if (Object.keys(cachedUrls).length > 0) {
+        setThumbnailUrls(prev => ({ ...prev, ...cachedUrls }));
+      }
+
+      // Batch fetch remaining URLs
+      if (urlsToFetch.length > 0) {
+        setLoadingThumbnails(new Set(urlsToFetch.map(item => item.docId)));
+        
+        // Process in smaller batches to avoid overwhelming the API
+        const batchSize = 5;
+        for (let i = 0; i < urlsToFetch.length; i += batchSize) {
+          const batch = urlsToFetch.slice(i, i + batchSize);
+          
+          const batchPromises = batch.map(async ({ docId, filePath }) => {
+            try {
+              const result = await DocumentService.getDocumentFileUrl(filePath);
+              if (result.data?.signedUrl) {
+                // Cache the URL
+                thumbnailCache.set(docId, {
+                  url: result.data.signedUrl,
+                  expires: Date.now() + CACHE_DURATION
+                });
+                return { docId, url: result.data.signedUrl };
+              }
+            } catch (error) {
+              console.warn(`Failed to get thumbnail URL for document ${docId}:`, error);
+            }
+            return null;
+          });
+
+          const batchResults = await Promise.allSettled(batchPromises);
+          const newUrls: Record<string, string> = {};
+          
+          batchResults.forEach((result) => {
+            if (result.status === 'fulfilled' && result.value) {
+              const { docId, url } = result.value;
+              newUrls[docId] = url;
+            }
+          });
+
+          if (Object.keys(newUrls).length > 0) {
+            setThumbnailUrls(prev => ({ ...prev, ...newUrls }));
+            
+            // Preload images for better UX
+            const urlsToPreload = Object.values(newUrls);
+            ImageService.preloadImages(urlsToPreload, 3).then(results => {
+              const successCount = results.filter(r => r.status === 'fulfilled').length;
+              console.log(`Preloaded ${successCount}/${urlsToPreload.length} thumbnail images`);
+            });
+          }
+
+          // Remove from loading set
+          setLoadingThumbnails(prev => {
+            const newSet = new Set(prev);
+            batch.forEach(({ docId }) => newSet.delete(docId));
+            return newSet;
+          });
+
+          // Small delay between batches to be nice to the API
+          if (i + batchSize < urlsToFetch.length) {
+            await new Promise(resolve => setTimeout(resolve, 100));
+          }
+        }
+      }
     };
 
     if (documents.length > 0) {
@@ -101,7 +173,7 @@ function useThumbnailUrls(documents: ExtendedDBDocument[]) {
     }
   }, [documents]);
 
-  return thumbnailUrls;
+  return { thumbnailUrls, loadingThumbnails };
 }
 
 // Convert database document to local document format
@@ -125,8 +197,8 @@ function convertDBDocumentToLocal(dbDoc: ExtendedDBDocument, thumbnailUrl?: stri
   // Get primary file for file info
   const primaryFile = dbDoc.files?.find(file => file.is_primary);
 
-  // Default fallback thumbnail
-  const defaultThumbnail = "https://images.unsplash.com/photo-1749660354104-9a5ab1225805?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHx1bml2ZXJzaXR5JTIwbGlicmFyeSUyMGJvb2tzJTIwYWNhZGVtaWN8ZW58MXx8fHwxNzU4MzY5MzU4fDA&ixlib=rb-4.1.0&q=80&w=1080&utm_source=figma&utm_medium=referral";
+  // No default thumbnail - let the Image component handle fallback
+  const defaultThumbnail = undefined;
 
   return {
     id: dbDoc.id,
@@ -141,7 +213,7 @@ function convertDBDocumentToLocal(dbDoc: ExtendedDBDocument, thumbnailUrl?: stri
     dateAdded: dbDoc.created_at,
     fileSize: primaryFile?.file_size || dbDoc.file_size || 'Unknown',
     pages: dbDoc.pages || 0,
-    thumbnail: thumbnailUrl || defaultThumbnail
+    thumbnail: thumbnailUrl || defaultThumbnail || ''
   };
 }
 
@@ -180,6 +252,7 @@ export function DocumentGrid({
     search: searchQuery || undefined,
     category: (useStarredDocs || useMyUploads) ? undefined : (categoryMap[category] || undefined),
     userId: useMyUploads ? user?.id : undefined,
+    includeUnpublished: useMyUploads, // Show all documents for My Uploads, only published for others
     limit: 50,
     autoFetch: false // Disable auto-fetch since we control it manually
   });
@@ -222,7 +295,7 @@ export function DocumentGrid({
   const currentError = useStarredDocs ? starredError : error;
 
   // Get thumbnail URLs for documents
-  const thumbnailUrls = useThumbnailUrls(currentDocuments);
+  const { thumbnailUrls, loadingThumbnails } = useThumbnailUrls(currentDocuments);
 
   // Initial load on mount
   React.useEffect(() => {
@@ -345,6 +418,7 @@ export function DocumentGrid({
           document={document} 
           onDocumentView={onDocumentView}
           onDownloadUpdate={handleDownloadUpdate}
+          isLoadingThumbnail={loadingThumbnails.has(document.id)}
         />
       ))}
     </div>

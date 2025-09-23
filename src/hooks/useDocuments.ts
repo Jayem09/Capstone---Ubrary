@@ -8,6 +8,7 @@ interface UseDocumentsOptions {
   category?: string
   search?: string
   userId?: string
+  includeUnpublished?: boolean
   autoFetch?: boolean
 }
 
@@ -68,6 +69,7 @@ export function useDocuments(options: UseDocumentsOptions = {}) {
     options.category, 
     options.search, 
     options.userId,
+    options.includeUnpublished,
     autoFetch
   ])
 

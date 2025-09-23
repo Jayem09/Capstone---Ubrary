@@ -93,14 +93,114 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Initialize authentication state - SIMPLE VERSION
   useEffect(() => {
-    initializeAuth();
+    // Add timeout to prevent infinite loading
+    const timeoutId = setTimeout(() => {
+      console.log('⚠️ Auth initialization timeout, using fallback');
+      if (import.meta.env.DEV) {
+        const mockUser = MOCK_USERS[1]; // Use Dr. Maria Santos (faculty)
+        setAuthState({
+          user: mockUser,
+          isAuthenticated: true,
+          isLoading: false,
+        });
+      } else {
+        setAuthState({
+          user: null,
+          isAuthenticated: false,
+          isLoading: false,
+        });
+      }
+    }, 5000); // 5 second timeout
+
+    initializeAuth().finally(() => {
+      clearTimeout(timeoutId);
+    });
+
+    // Listen for auth state changes (login/logout)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+      console.log('🔄 Auth state changed:', event, session ? 'Session found' : 'No session');
+      
+      if (event === 'SIGNED_IN' && session?.user) {
+        // User just signed in - load their profile
+        try {
+          const { data: dbUser } = await supabase
+            .from('users')
+            .select('*')
+            .eq('id', session.user.id)
+            .single();
+          
+          if (dbUser) {
+            setAuthState({
+              user: {
+                id: dbUser.id,
+                email: dbUser.email,
+                firstName: dbUser.first_name,
+                lastName: dbUser.last_name,
+                role: dbUser.role,
+                program: dbUser.program,
+                department: dbUser.department,
+                studentId: dbUser.student_id,
+                employeeId: dbUser.employee_id,
+                avatar: `${dbUser.first_name?.[0] || 'U'}${dbUser.last_name?.[0] || ''}`,
+                isActive: dbUser.is_active,
+                createdAt: dbUser.created_at,
+                lastLoginAt: dbUser.last_login_at,
+              },
+              isAuthenticated: true,
+              isLoading: false,
+            });
+          } else {
+            // User exists in auth but not in our users table - use session data
+            setAuthState({
+              user: {
+                id: session.user.id,
+                email: session.user.email || '',
+                firstName: session.user.user_metadata?.first_name || 'User',
+                lastName: session.user.user_metadata?.last_name || '',
+                role: (session.user.user_metadata?.role as any) || 'student',
+                program: session.user.user_metadata?.program,
+                department: session.user.user_metadata?.department,
+                studentId: session.user.user_metadata?.student_id,
+                employeeId: session.user.user_metadata?.employee_id,
+                avatar: `${session.user.user_metadata?.first_name?.[0] || 'U'}${session.user.user_metadata?.last_name?.[0] || ''}`,
+                isActive: true,
+                createdAt: session.user.created_at || new Date().toISOString(),
+                lastLoginAt: new Date().toISOString(),
+              },
+              isAuthenticated: true,
+              isLoading: false,
+            });
+          }
+        } catch (error) {
+          console.error('Error loading user profile after sign in:', error);
+          setAuthState({
+            user: null,
+            isAuthenticated: false,
+            isLoading: false,
+          });
+        }
+      } else if (event === 'SIGNED_OUT') {
+        setAuthState({
+          user: null,
+          isAuthenticated: false,
+          isLoading: false,
+        });
+      }
+    });
+
+    return () => {
+      clearTimeout(timeoutId);
+      subscription.unsubscribe();
+    };
   }, []);
 
   const initializeAuth = async () => {
     try {
+      console.log('🔄 Initializing auth...');
       
       // Get current session
       const { data: { session } } = await supabase.auth.getSession();
+      console.log('📊 Session:', session ? 'Found' : 'None');
       
       if (session?.user) {
         
@@ -305,7 +405,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setAuthState(prev => ({ ...prev, isLoading: true }));
 
     try {
-      // Try real Supabase registration with metadata
+      // Try real Supabase registration with minimal metadata to avoid trigger issues
       const { data: authData, error: authError } = await supabase.auth.signUp({
         email: userData.email,
         password: userData.password,
@@ -324,6 +424,50 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (authError) {
         console.error('Supabase auth signup error:', authError);
+        
+        // If it's a database error, try a different approach
+        if (authError.message?.includes('Database error saving new user')) {
+          console.log('🔄 Trying alternative registration approach...');
+          
+          // Try registration without metadata first
+          const { data: simpleAuthData, error: simpleAuthError } = await supabase.auth.signUp({
+            email: userData.email,
+            password: userData.password
+          });
+
+          if (simpleAuthError) {
+            throw new Error(simpleAuthError.message || 'Registration failed');
+          }
+
+          if (!simpleAuthData.user) {
+            throw new Error('Registration failed - no user returned');
+          }
+
+          // Manually create the user profile
+          const { error: insertError } = await supabase
+            .from('users')
+            .insert({
+              id: simpleAuthData.user.id,
+              email: userData.email,
+              first_name: userData.firstName,
+              last_name: userData.lastName,
+              role: userData.role,
+              program: userData.program,
+              department: userData.department,
+              student_id: userData.studentId,
+              employee_id: userData.employeeId,
+            });
+
+          if (insertError) {
+            console.error('Failed to create user profile:', insertError);
+            await supabase.auth.signOut();
+            throw new Error('Failed to create user profile: ' + insertError.message);
+          }
+
+          console.log('✅ User registered successfully with manual profile creation');
+          return;
+        }
+        
         throw new Error(authError.message || 'Registration failed');
       }
 
@@ -331,9 +475,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         throw new Error('Registration failed - no user returned');
       }
 
-
-      // The trigger should automatically create the user profile
-      // Let's verify it was created
+      // Check if user profile was created by trigger
       try {
         const { data: profile, error: profileError } = await supabase
           .from('users')
@@ -342,6 +484,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           .single();
 
         if (profileError) {
+          console.log('🔄 Trigger failed, creating profile manually...');
           
           // Manually create profile if trigger failed
           const { error: insertError } = await supabase
@@ -359,17 +502,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             });
 
           if (insertError) {
-            console.error('Failed to create user profile:', insertError);
-            await supabase.auth.signOut();
-            throw new Error('Failed to create user profile: ' + insertError.message);
+            // If it's a duplicate key error, the user already exists (trigger worked)
+            if (insertError.code === '23505') {
+              console.log('✅ User profile already exists (trigger worked):', insertError.message);
+            } else {
+              console.error('Failed to create user profile:', insertError);
+              await supabase.auth.signOut();
+              throw new Error('Failed to create user profile: ' + insertError.message);
+            }
           }
         } else {
+          console.log('✅ User profile created successfully by trigger:', profile);
         }
       } catch (profileCheckError) {
-        // Continue anyway - the trigger might have worked
+        console.error('Error checking/creating user profile:', profileCheckError);
+        // Continue anyway - the user might still be able to login
       }
 
-      // User profile will be loaded by the auth state change listener
+      console.log('✅ Registration completed successfully');
+      
+      // Don't set loading to false here - let the auth state change listener handle it
+      // The user will be automatically signed in and the auth state will update
 
     } catch (error) {
       setAuthState(prev => ({ ...prev, isLoading: false }));
@@ -439,7 +592,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 export function useAuth() {
   const context = useContext(AuthContext);
   if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
+    console.error('useAuth called outside AuthProvider, using fallback');
+    // Return a safe fallback instead of throwing
+    return {
+      user: null,
+      isAuthenticated: false,
+      isLoading: false,
+      login: async () => {},
+      logout: () => {},
+      register: async () => {},
+      switchRole: () => {},
+      hasPermission: () => false,
+      getUserPermissions: () => ({ canRead: false, canWrite: false, canDelete: false, canAdmin: false })
+    };
   }
   return context;
 }

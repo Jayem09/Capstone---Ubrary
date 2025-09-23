@@ -11,6 +11,7 @@ import { RegisterDialog } from "./components/RegisterDialog";
 import { Toaster } from "./components/ui/sonner";
 import { RoleSwitcher } from "./components/RoleSwitcher";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
+import { SidebarStatsProvider } from "./contexts/SidebarStatsContext";
 import { useState, useEffect } from "react";
 import { Menu, X, LogIn } from "lucide-react";
 import { Button } from "./components/ui/button";
@@ -38,6 +39,7 @@ function AppContent() {
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [selectedDocument, setSelectedDocument] = useState<Document | null>(null);
   const [isViewerOpen, setIsViewerOpen] = useState(false);
+  const [isViewerFullscreen, setIsViewerFullscreen] = useState(false);
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
@@ -65,6 +67,7 @@ function AppContent() {
   const handleDocumentView = (document: Document) => {
     setSelectedDocument(document);
     setIsViewerOpen(true);
+    setIsViewerFullscreen(false); // Regular viewer from main app
   };
 
   const handleUploadClick = () => {
@@ -136,25 +139,29 @@ function AppContent() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Role Switcher for Demo - Disabled */}
-      <div className="fixed top-16 right-4 z-50">
-        <RoleSwitcher />
-      </div>
+      {!isViewerFullscreen && (
+        <div className="fixed top-16 right-4 z-50">
+          <RoleSwitcher />
+        </div>
+      )}
       {/* Header */}
-      <Header />
+      {!isViewerFullscreen && <Header />}
       
       <div className="flex relative">
         {/* Mobile Menu Button */}
-        <Button
-          variant="ghost"
-          size="sm"
-          className="lg:hidden fixed top-4 left-4 z-[60] bg-white shadow-md hover:bg-gray-50"
-          onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-        >
-          {isSidebarOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
-        </Button>
+        {!isViewerFullscreen && (
+          <Button
+            variant="ghost"
+            size="sm"
+            className="lg:hidden fixed top-4 left-4 z-[60] bg-white shadow-md hover:bg-gray-50"
+            onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+          >
+            {isSidebarOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
+          </Button>
+        )}
 
         {/* Mobile Overlay */}
-        {isSidebarOpen && (
+        {!isViewerFullscreen && isSidebarOpen && (
           <div 
             className="fixed inset-0 bg-black/50 z-[35] lg:hidden backdrop-blur-sm"
             onClick={() => setIsSidebarOpen(false)}
@@ -163,34 +170,43 @@ function AppContent() {
         )}
 
         {/* Sidebar */}
-        <div className={`
-          ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}
-          lg:translate-x-0
-          fixed lg:static
-          inset-y-0 left-0 z-[40]
-          w-64 bg-white border-r border-gray-200
-          transition-transform duration-300 ease-in-out
-          lg:transition-none
-          overflow-y-auto
-        `}>
-          <Sidebar 
-            selectedCategory={selectedCategory}
-            onCategoryChange={setSelectedCategory}
-            onUploadClick={handleUploadClick}
-            onClose={() => setIsSidebarOpen(false)}
-          />
-        </div>
+        {!isViewerFullscreen && (
+          <div className={`
+            ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}
+            lg:translate-x-0
+            fixed lg:static
+            inset-y-0 left-0 z-[40]
+            w-64 bg-white border-r border-gray-200
+            transition-transform duration-300 ease-in-out
+            lg:transition-none
+            overflow-y-auto
+          `}>
+            <Sidebar 
+              selectedCategory={selectedCategory}
+              onCategoryChange={setSelectedCategory}
+              onUploadClick={handleUploadClick}
+              onClose={() => setIsSidebarOpen(false)}
+            />
+          </div>
+        )}
         
         {/* Main Content */}
-        <main className="flex-1 p-4 lg:p-6 lg:ml-0 relative z-0">
-          {selectedCategory === 'admin' ? (
-            <AdminDashboard />
-          ) : selectedCategory === 'workflow' ? (
-            <div className="max-w-7xl mx-auto">
-              <h1 className="text-3xl font-bold mb-6">Document Workflow</h1>
-              <WorkflowDashboard />
-            </div>
-          ) : selectedCategory === 'analytics' ? (
+        {!isViewerFullscreen && (
+          <main className="flex-1 p-4 lg:p-6 lg:ml-0 relative z-0">
+            {selectedCategory === 'admin' ? (
+              <AdminDashboard />
+            ) : selectedCategory === 'workflow' ? (
+              <div className="max-w-7xl mx-auto">
+                <h1 className="text-3xl font-bold mb-6">Document Workflow</h1>
+                <WorkflowDashboard 
+                  onDocumentView={(document) => {
+                    setSelectedDocument(document);
+                    setIsViewerOpen(true);
+                    setIsViewerFullscreen(true); // Fullscreen mode for workflow
+                  }}
+                />
+              </div>
+            ) : selectedCategory === 'analytics' ? (
             <div className="max-w-7xl mx-auto">
               <h1 className="text-3xl font-bold mb-6">Analytics</h1>
               <p className="text-gray-600">Analytics dashboard is available in the Admin Panel.</p>
@@ -228,14 +244,19 @@ function AppContent() {
               />
             </div>
           )}
-        </main>
+          </main>
+        )}
       </div>
 
       {/* Document Viewer Modal */}
       <DocumentViewer
         document={selectedDocument}
         isOpen={isViewerOpen}
-        onClose={() => setIsViewerOpen(false)}
+        fullscreen={isViewerFullscreen}
+        onClose={() => {
+          setIsViewerOpen(false);
+          setIsViewerFullscreen(false);
+        }}
       />
 
       {/* Upload Dialog */}
@@ -253,7 +274,9 @@ function AppContent() {
 export default function App() {
   return (
     <AuthProvider>
-      <AppContent />
+      <SidebarStatsProvider>
+        <AppContent />
+      </SidebarStatsProvider>
     </AuthProvider>
   );
 }

@@ -6,11 +6,10 @@ import {
   Mail, 
   Globe,
   HardDrive,
-  Clock,
   Bell,
   Key,
   Server,
-  Backup,
+  Archive,
   AlertTriangle,
   CheckCircle,
   Save
@@ -151,7 +150,7 @@ export function SystemSettings() {
               className="w-full justify-start"
               onClick={() => toast.info("Backup initiated", { description: "System backup is starting..." })}
             >
-              <Backup className="w-4 h-4 mr-2" />
+              <Archive className="w-4 h-4 mr-2" />
               Run Backup Now
             </Button>
             <Button 
@@ -184,7 +183,7 @@ export function SystemSettings() {
         {/* System Status */}
         <Card className="p-6">
           <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-            <Activity className="w-5 h-5" />
+            <Server className="w-5 h-5" />
             System Status
           </h3>
           <div className="space-y-4">

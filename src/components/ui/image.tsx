@@ -1,42 +1,141 @@
-import React, { useState } from 'react'
-
-const FALLBACK_IMAGE =
-  'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iODgiIGhlaWdodD0iODgiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyIgc3Ryb2tlPSIjMDAwIiBzdHJva2UtbGluZWpvaW49InJvdW5kIiBvcGFjaXR5PSIuMyIgZmlsbD0ibm9uZSIgc3Ryb2tlLXdpZHRoPSIzLjciPjxyZWN0IHg9IjE2IiB5PSIxNiIgd2lkdGg9IjU2IiBoZWlnaHQ9IjU2IiByeD0iNiIvPjxwYXRoIGQ9Im0xNiA1OCAxNi0xOCAzMiAzMiIvPjxjaXJjbGUgY3g9IjUzIiBjeT0iMzUiIHI9IjciLz48L3N2Zz4KCg=='
+import React, { useState, useRef, useEffect } from 'react'
+import { FileText } from 'lucide-react'
 
 interface ImageProps extends React.ImgHTMLAttributes<HTMLImageElement> {
   src?: string;
   alt?: string;
   fallbackClassName?: string;
+  lazy?: boolean;
+  showSkeleton?: boolean;
+  retryAttempts?: number;
+  retryDelay?: number;
 }
 
-export function Image({ src, alt, className, fallbackClassName, ...props }: ImageProps) {
+export function Image({ 
+  src, 
+  alt, 
+  className, 
+  fallbackClassName, 
+  lazy = true,
+  showSkeleton = true,
+  retryAttempts = 2,
+  retryDelay = 1000,
+  ...props 
+}: ImageProps) {
   const [hasError, setHasError] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
+  const [isInView, setIsInView] = useState(!lazy)
+  const [currentAttempt, setCurrentAttempt] = useState(0)
+  const [currentSrc, setCurrentSrc] = useState(src)
+  const imgRef = useRef<HTMLImageElement>(null)
+  const retryTimeoutRef = useRef<NodeJS.Timeout | undefined>(undefined)
+
+  // Intersection Observer for lazy loading
+  useEffect(() => {
+    if (!lazy || !imgRef.current) return
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setIsInView(true)
+          observer.disconnect()
+        }
+      },
+      { 
+        threshold: 0.1,
+        rootMargin: '50px' // Start loading 50px before the image comes into view
+      }
+    )
+
+    observer.observe(imgRef.current)
+
+    return () => observer.disconnect()
+  }, [lazy])
+
+  // Reset states when src changes
+  useEffect(() => {
+    if (src !== currentSrc) {
+      setCurrentSrc(src)
+      setHasError(false)
+      setIsLoading(true)
+      setCurrentAttempt(0)
+      if (retryTimeoutRef.current) {
+        clearTimeout(retryTimeoutRef.current)
+      }
+    }
+  }, [src, currentSrc])
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (retryTimeoutRef.current) {
+        clearTimeout(retryTimeoutRef.current)
+      }
+    }
+  }, [])
 
   const handleError = () => {
-    setHasError(true)
+    if (currentAttempt < retryAttempts) {
+      // Retry after delay
+      setCurrentAttempt(prev => prev + 1)
+      retryTimeoutRef.current = setTimeout(() => {
+        setCurrentSrc(`${src}?retry=${currentAttempt + 1}`)
+      }, retryDelay * (currentAttempt + 1)) // Exponential backoff
+    } else {
+      setHasError(true)
+      setIsLoading(false)
+    }
   }
 
-  if (hasError || !src) {
+  const handleLoad = () => {
+    setIsLoading(false)
+    setCurrentAttempt(0) // Reset attempt counter on successful load
+  }
+
+  // Show fallback if error or no src
+  if (hasError || !src || src === '') {
     return (
       <div
-        className={`inline-flex items-center justify-center bg-gray-100 text-gray-400 ${fallbackClassName || className || ''}`}
+        ref={imgRef}
+        className={`inline-flex items-center justify-center bg-gray-50 border border-gray-200 text-gray-400 ${fallbackClassName || className || ''}`}
         {...props}
       >
-        <img 
-          src={FALLBACK_IMAGE} 
-          alt="Image not available" 
-          className="opacity-50"
-        />
+        <FileText className="w-8 h-8 opacity-40" />
       </div>
+    )
+  }
+
+  // Show skeleton while loading (if enabled)
+  if (showSkeleton && isLoading && isInView) {
+    return (
+      <div
+        ref={imgRef}
+        className={`animate-pulse bg-gray-200 ${className || ''}`}
+        {...props}
+      />
+    )
+  }
+
+  // Show placeholder for lazy loading
+  if (!isInView) {
+    return (
+      <div
+        ref={imgRef}
+        className={`bg-gray-100 ${className || ''}`}
+        {...props}
+      />
     )
   }
 
   return (
     <img 
-      src={src} 
+      ref={imgRef}
+      src={currentSrc} 
       alt={alt} 
-      className={className} 
+      className={`transition-opacity duration-300 ${isLoading ? 'opacity-0' : 'opacity-100'} ${className || ''}`}
       onError={handleError}
+      onLoad={handleLoad}
+      loading={lazy ? 'lazy' : 'eager'}
       {...props} 
     />
   )
