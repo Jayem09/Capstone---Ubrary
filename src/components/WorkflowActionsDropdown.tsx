@@ -14,7 +14,7 @@ interface WorkflowActionsDropdownProps {
   onReject?: () => void;
   onRequestRevision?: () => void;
   onStar?: () => void;
-  userRole?: 'student' | 'faculty' | 'library_staff' | 'admin';
+  userRole?: 'student' | 'faculty' | 'librarian' | 'admin';
 }
 
 export function WorkflowActionsDropdown({
@@ -80,7 +80,7 @@ export function WorkflowActionsDropdown({
     }
 
     // Role-specific actions
-    if (userRole === 'faculty' || userRole === 'library_staff' || userRole === 'admin') {
+    if (userRole === 'faculty' || userRole === 'librarian' || userRole === 'admin') {
       if (document.status === 'pending' && onStartReview) {
         actions.push({
           label: 'Start Review',

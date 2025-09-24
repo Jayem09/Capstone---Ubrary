@@ -9,7 +9,6 @@ import { WorkflowDashboard } from "./components/WorkflowDashboard";
 import { LoginDialog } from "./components/LoginDialog";
 import { RegisterDialog } from "./components/RegisterDialog";
 import { Toaster } from "./components/ui/sonner";
-import { RoleSwitcher } from "./components/RoleSwitcher";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { SidebarStatsProvider } from "./contexts/SidebarStatsContext";
 import { useState, useEffect } from "react";
@@ -138,12 +137,6 @@ function AppContent() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Role Switcher for Demo - Disabled */}
-      {!isViewerFullscreen && (
-        <div className="fixed top-16 right-4 z-50">
-          <RoleSwitcher />
-        </div>
-      )}
       {/* Header */}
       {!isViewerFullscreen && <Header />}
       

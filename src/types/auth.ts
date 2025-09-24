@@ -66,7 +66,7 @@ export const ROLE_PERMISSIONS: Record<UserRole, RolePermissions> = {
     canEdit: true,
     canDelete: false,
     canViewWorkflow: true, 
-    canManageWorkflow: false, 
+    canManageWorkflow: true, 
     canManageUsers: false,
     canViewAnalytics: true,
     canManageCategories: false,
