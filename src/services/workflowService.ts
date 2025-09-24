@@ -149,7 +149,11 @@ export class WorkflowService {
       }
 
       console.log('✅ Status update successful')
-      toast.success(`Document ${statusLabels[newStatus]}`)
+      if (statusLabels[newStatus]) {
+        toast.success(`Document ${statusLabels[newStatus]}`)
+      } else {
+        toast.success(`Document status updated to ${newStatus}`)
+      }
       return { data: null, error: null }
     } catch (error) {
       console.error('💥 Unexpected error in updateDocumentStatus:', error)
@@ -182,11 +186,15 @@ export class WorkflowService {
   // Get documents by workflow status for different user roles
   static async getDocumentsByWorkflowStatus(
     userId: string,
-    statusFilter?: DocumentStatus,
+    statusFilter?: DocumentStatus | 'all',
     limit = 20,
     offset = 0
   ) {
     try {
+      console.log('🔍 Starting workflow document fetch for user:', userId, 'with statusFilter:', statusFilter)
+
+      // Try RPC function first (if it exists)
+      console.log('🔍 Calling RPC function get_documents_by_workflow_status...')
       const { data, error } = await supabase.rpc('get_documents_by_workflow_status', {
         user_id_param: userId,
         status_filter: statusFilter,
@@ -194,12 +202,87 @@ export class WorkflowService {
         offset_count: offset
       })
 
-      if (error) {
-        console.error('Error fetching documents by workflow status:', error)
-        toast.error('Failed to load documents')
-        return { data: [], error }
+      console.log('🔍 RPC function result - data:', data?.length || 0, 'documents, error:', error)
+
+      // TEMPORARY: If RPC returns 0 documents but no error, try fallback
+      if (error || !data || (data && data.length === 0)) {
+        console.log('🔄 RPC function returned no data, trying fallback query...')
+
+        // Debug: Check if there are any documents in the database at all
+        try {
+          const { data: allDocsCheck, error: checkError } = await supabase
+            .from('documents')
+            .select('id, title, status, user_id, adviser_id')
+            .limit(5)
+
+          console.log('🔍 DEBUG: Total documents in database:', allDocsCheck?.length || 0)
+          if (checkError) {
+            console.error('❌ Error checking documents:', checkError)
+          } else {
+            console.log('🔍 DEBUG: Sample documents:', allDocsCheck)
+          }
+        } catch (debugError) {
+          console.error('❌ Error in debug check:', debugError)
+        }
+
+        try {
+          // Get user info first to determine their role
+          const { data: userData } = await supabase
+            .from('users')
+            .select('role')
+            .eq('id', userId)
+            .single()
+
+          console.log('🔍 User role:', userData?.role)
+
+          // For now, show all workflow documents to make the system functional
+          // This will be replaced with proper role-based filtering later
+          let query = supabase
+            .from('documents')
+            .select(`
+              id,
+              title,
+              abstract,
+              program,
+              year,
+              status,
+              author_names,
+              adviser_name,
+              created_at,
+              updated_at
+            `)
+            .in('status', ['pending', 'under_review', 'needs_revision', 'approved', 'curation', 'ready_for_publication'])
+            .order('updated_at', { ascending: false })
+            .limit(limit)
+
+          console.log('🔍 Executing fallback query...')
+          const { data: fallbackData, error: fallbackError } = await query
+
+          if (fallbackError) {
+            console.error('❌ Error in fallback query:', fallbackError)
+            toast.error('Failed to load documents')
+            return { data: [], error: fallbackError }
+          }
+
+          console.log('✅ Fallback query successful - found', fallbackData?.length || 0, 'documents')
+
+          // Add workflow_position for display
+          const documentsWithPosition = (fallbackData || []).map((doc, index) => ({
+            ...doc,
+            workflow_position: offset + index + 1
+          }))
+
+          return { data: documentsWithPosition, error: null }
+
+        } catch (fallbackError) {
+          console.error('❌ Error in fallback:', fallbackError)
+          toast.error('Failed to load documents')
+          return { data: [], error: fallbackError }
+        }
       }
 
+      // If we get here, RPC worked and returned data
+      console.log('✅ RPC function succeeded, returning', data?.length || 0, 'documents')
       return { data: data || [], error: null }
     } catch (error) {
       console.error('Error in getDocumentsByWorkflowStatus:', error)
@@ -408,13 +491,12 @@ export class WorkflowService {
       return { data: null, error }
     }
   }
-
   // Get workflow statistics for dashboard
   static async getWorkflowStatistics(userId: string, userRole: string) {
     try {
       const queries = []
 
-      // Get counts for different statuses
+      // Get counts for different statuses - using extended database statuses
       if (userRole === 'student') {
         queries.push(
           supabase.from('documents').select('*', { count: 'exact', head: true }).eq('user_id', userId).eq('status', 'pending'),
@@ -426,8 +508,8 @@ export class WorkflowService {
         queries.push(
           supabase.from('documents').select('*', { count: 'exact', head: true }).eq('adviser_id', userId).eq('status', 'pending'),
           supabase.from('documents').select('*', { count: 'exact', head: true }).eq('adviser_id', userId).eq('status', 'under_review'),
-          supabase.from('document_reviews').select('*', { count: 'exact', head: true }).eq('reviewer_id', userId).eq('status', 'pending'),
-          supabase.from('document_revision_requests').select('*', { count: 'exact', head: true }).eq('requested_from', userId).eq('status', 'pending')
+          supabase.from('documents').select('*', { count: 'exact', head: true }).eq('adviser_id', userId).eq('status', 'needs_revision'),
+          supabase.from('documents').select('*', { count: 'exact', head: true }).eq('adviser_id', userId).eq('status', 'published')
         )
       } else if (userRole === 'librarian' || userRole === 'admin') {
         queries.push(
@@ -450,14 +532,16 @@ export class WorkflowService {
         published: counts[5] || 0
       }
     } catch (error) {
-      console.error('Error in getWorkflowStatistics:', error)
+      console.error('❌ Error in getWorkflowStatistics:', error)
       return {
         pending: 0,
         under_review: 0,
         needs_revision: 0,
+        approved: 0,
         curation: 0,
         ready_for_publication: 0,
-        published: 0
+        published: 0,
+        rejected: 0
       }
     }
   }

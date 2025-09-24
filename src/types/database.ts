@@ -58,7 +58,7 @@ export interface Database {
           abstract: string
           program: string
           year: number
-          status: 'pending' | 'approved' | 'rejected' | 'published'
+          status: 'pending' | 'under_review' | 'needs_revision' | 'approved' | 'curation' | 'ready_for_publication' | 'published' | 'rejected'
           user_id: string
           adviser_id: string
           author_names: string | null
@@ -77,7 +77,7 @@ export interface Database {
           abstract: string
           program: string
           year: number
-          status?: 'pending' | 'approved' | 'rejected' | 'published'
+          status?: 'pending' | 'under_review' | 'needs_revision' | 'approved' | 'curation' | 'ready_for_publication' | 'published' | 'rejected'
           user_id: string
           adviser_id: string
           author_names?: string | null
@@ -96,7 +96,7 @@ export interface Database {
           abstract?: string
           program?: string
           year?: number
-          status?: 'pending' | 'approved' | 'rejected' | 'published'
+          status?: 'pending' | 'under_review' | 'needs_revision' | 'approved' | 'curation' | 'ready_for_publication' | 'published' | 'rejected'
           user_id?: string
           adviser_id?: string
           author_names?: string | null
@@ -278,7 +278,7 @@ export interface Database {
     }
     Enums: {
       user_role: 'student' | 'faculty' | 'librarian' | 'admin'
-      document_status: 'pending' | 'approved' | 'rejected' | 'published'
+      document_status: 'pending' | 'under_review' | 'needs_revision' | 'approved' | 'curation' | 'ready_for_publication' | 'published' | 'rejected'
     }
   }
 }

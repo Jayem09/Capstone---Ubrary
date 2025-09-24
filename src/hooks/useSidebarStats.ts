@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../contexts/AuthContext'
 import { StarredService } from '../services/starredService'
@@ -18,6 +18,16 @@ export interface SidebarStats {
   }
 }
 
+// Cache for sidebar stats to avoid refetching on every navigation
+interface CachedStats {
+  data: SidebarStats
+  timestamp: number
+  userId: string
+}
+
+const STATS_CACHE_DURATION = 5 * 60 * 1000 // 5 minutes
+let statsCache: CachedStats | null = null
+
 export function useSidebarStats() {
   const [stats, setStats] = useState<SidebarStats>({
     totalDocuments: 0,
@@ -32,15 +42,23 @@ export function useSidebarStats() {
       totalDownloads: 0
     }
   })
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const { user } = useAuth()
   const { refreshTrigger } = useSidebarStatsContext()
+  const fetchedRef = useRef(false)
 
-  const fetchStats = async () => {
+  const fetchStats = useCallback(async () => {
     if (!user) {
-      setLoading(false)
+      return
+    }
+
+    // Check cache first
+    if (statsCache &&
+        statsCache.userId === user.id &&
+        Date.now() - statsCache.timestamp < STATS_CACHE_DURATION) {
+      setStats(statsCache.data)
       return
     }
 
@@ -48,97 +66,136 @@ export function useSidebarStats() {
       setLoading(true)
       setError(null)
 
-      // Fetch total documents
-      const { count: totalDocs } = await supabase
-        .from('documents')
-        .select('*', { count: 'exact', head: true })
-        .eq('status', 'published')
+      // Run all queries in parallel for better performance
+      const [
+        totalDocsResult,
+        recentDocsResult,
+        myUploadsResult,
+        starredCount,
+        workflowDocsResult,
+        categoryData,
+        totalThesesResult,
+        thisMonthResult,
+        downloadData
+      ] = await Promise.all([
+        // Fetch total documents
+        supabase
+          .from('documents')
+          .select('*', { count: 'exact', head: true })
+          .eq('status', 'published'),
 
-      // Fetch recent documents (last 7 days)
-      const sevenDaysAgo = new Date()
-      sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
-      
-      const { count: recentDocs } = await supabase
-        .from('documents')
-        .select('*', { count: 'exact', head: true })
-        .eq('status', 'published')
-        .gte('created_at', sevenDaysAgo.toISOString())
+        // Fetch recent documents (last 7 days)
+        (async () => {
+          const sevenDaysAgo = new Date()
+          sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7)
+          return supabase
+            .from('documents')
+            .select('*', { count: 'exact', head: true })
+            .eq('status', 'published')
+            .gte('created_at', sevenDaysAgo.toISOString())
+        })(),
 
-      // Fetch user's uploads
-      const { count: myUploads } = await supabase
-        .from('documents')
-        .select('*', { count: 'exact', head: true })
-        .eq('user_id', user.id)
+        // Fetch user's uploads
+        supabase
+          .from('documents')
+          .select('*', { count: 'exact', head: true })
+          .eq('user_id', user.id),
 
-      // Fetch starred documents count
-      const starredCount = await StarredService.getStarredCount()
+        // Fetch starred documents count
+        StarredService.getStarredCount(),
 
-      // Fetch workflow documents (pending, under_review, needs_revision)
-      const { count: workflowDocs } = await supabase
-        .from('documents')
-        .select('*', { count: 'exact', head: true })
-        .in('status', ['pending', 'under_review', 'needs_revision'])
+        // Fetch workflow documents (pending, under_review, needs_revision)
+        supabase
+          .from('documents')
+          .select('*', { count: 'exact', head: true })
+          .in('status', ['pending', 'under_review', 'needs_revision']),
 
-      // Fetch category counts
-      const { data: categoryData } = await supabase
-        .from('documents')
-        .select('program')
-        .eq('status', 'published')
+        // Fetch category counts
+        supabase
+          .from('documents')
+          .select('program')
+          .eq('status', 'published'),
 
+        // Fetch repository stats
+        supabase
+          .from('documents')
+          .select('*', { count: 'exact', head: true }),
+
+        // This month's uploads
+        (async () => {
+          const startOfMonth = new Date()
+          startOfMonth.setDate(1)
+          startOfMonth.setHours(0, 0, 0, 0)
+          return supabase
+            .from('documents')
+            .select('*', { count: 'exact', head: true })
+            .gte('created_at', startOfMonth.toISOString())
+        })(),
+
+        // Total downloads (sum of download_count from all documents)
+        supabase
+          .from('documents')
+          .select('download_count')
+      ])
+
+      // Calculate category counts
       const categoryCounts: Record<string, number> = {}
-      if (categoryData) {
-        categoryData.forEach(doc => {
+      if (categoryData.data) {
+        categoryData.data.forEach(doc => {
           const program = doc.program?.toLowerCase() || 'other'
           categoryCounts[program] = (categoryCounts[program] || 0) + 1
         })
       }
 
-      // Fetch repository stats
-      const { count: totalTheses } = await supabase
-        .from('documents')
-        .select('*', { count: 'exact', head: true })
+      // Calculate total downloads
+      const totalDownloads = downloadData.data?.reduce((sum, doc) => sum + (doc.download_count || 0), 0) || 0
 
-      // This month's uploads
-      const startOfMonth = new Date()
-      startOfMonth.setDate(1)
-      startOfMonth.setHours(0, 0, 0, 0)
-
-      const { count: thisMonth } = await supabase
-        .from('documents')
-        .select('*', { count: 'exact', head: true })
-        .gte('created_at', startOfMonth.toISOString())
-
-      // Total downloads (sum of download_count from all documents)
-      const { data: downloadData } = await supabase
-        .from('documents')
-        .select('download_count')
-
-      const totalDownloads = downloadData?.reduce((sum, doc) => sum + (doc.download_count || 0), 0) || 0
-
-      setStats({
-        totalDocuments: totalDocs || 0,
-        recentDocuments: recentDocs || 0,
-        myUploads: myUploads || 0,
+      const newStats = {
+        totalDocuments: totalDocsResult.count || 0,
+        recentDocuments: recentDocsResult.count || 0,
+        myUploads: myUploadsResult.count || 0,
         starredDocuments: starredCount,
-        workflowDocuments: workflowDocs || 0,
+        workflowDocuments: workflowDocsResult.count || 0,
         categoryCounts,
         repositoryStats: {
-          totalTheses: totalTheses || 0,
-          thisMonth: thisMonth || 0,
+          totalTheses: totalThesesResult.count || 0,
+          thisMonth: thisMonthResult.count || 0,
           totalDownloads
         }
-      })
+      }
+
+      // Cache the results
+      statsCache = {
+        data: newStats,
+        timestamp: Date.now(),
+        userId: user.id
+      }
+
+      setStats(newStats)
     } catch (err) {
-      console.error('Error fetching sidebar stats:', err)
       setError('Failed to load statistics')
     } finally {
       setLoading(false)
     }
-  }
+  }, [user])
 
   useEffect(() => {
-    fetchStats()
-  }, [user, refreshTrigger]) // Add refreshTrigger to dependencies
+    // Only fetch stats if user exists and we haven't fetched yet for this session
+    if (user && !fetchedRef.current) {
+      fetchedRef.current = true
+      fetchStats()
+    }
+  }, [user, fetchStats])
+
+  // Handle refresh trigger separately to avoid re-fetching on every navigation
+  useEffect(() => {
+    if (refreshTrigger > 0 && user) {
+      // Clear cache and refetch when explicitly requested
+      statsCache = null
+      fetchedRef.current = false
+      fetchStats()
+    }
+  }, [refreshTrigger, user, fetchStats])
 
   return {
     stats,

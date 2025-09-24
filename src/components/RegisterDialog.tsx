@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { UserPlus } from "lucide-react";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
@@ -15,8 +15,7 @@ interface RegisterDialogProps {
 }
 
 export function RegisterDialog({ isOpen, onClose }: RegisterDialogProps) {
-  const { register } = useAuth();
-  const [isLoading, setIsLoading] = useState(false);
+  const { register, isLoading, error, clearError } = useAuth();
   const [formData, setFormData] = useState({
     email: "",
     password: "",
@@ -30,13 +29,34 @@ export function RegisterDialog({ isOpen, onClose }: RegisterDialogProps) {
     employeeId: ""
   });
 
+  // Reset form when dialog closes
+  useEffect(() => {
+    if (!isOpen) {
+      setFormData({
+        email: "",
+        password: "",
+        confirmPassword: "",
+        firstName: "",
+        lastName: "",
+        role: "" as UserRole,
+        program: "",
+        department: "",
+        studentId: "",
+        employeeId: ""
+      });
+      clearError();
+    }
+  }, [isOpen, clearError]);
+
   const handleInputChange = (field: string, value: string) => {
     setFormData({ ...formData, [field]: value });
+    // Clear any existing errors when user starts typing
+    if (error) clearError();
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!formData.email || !formData.password || !formData.firstName || !formData.lastName || !formData.role) {
       toast.error("Please fill in all required fields");
       return;
@@ -52,14 +72,22 @@ export function RegisterDialog({ isOpen, onClose }: RegisterDialogProps) {
       return;
     }
 
-    setIsLoading(true);
+    // Trim inputs
+    const email = formData.email.trim();
+    const firstName = formData.firstName.trim();
+    const lastName = formData.lastName.trim();
+
+    if (!email || !firstName || !lastName) {
+      toast.error("Please fill in all required fields");
+      return;
+    }
 
     try {
       await register({
-        email: formData.email,
+        email,
         password: formData.password,
-        firstName: formData.firstName,
-        lastName: formData.lastName,
+        firstName,
+        lastName,
         role: formData.role,
         program: formData.program || undefined,
         department: formData.department || undefined,
@@ -71,30 +99,14 @@ export function RegisterDialog({ isOpen, onClose }: RegisterDialogProps) {
         description: "You can now log in with your new account"
       });
 
-      // Reset form
-      setFormData({
-        email: "",
-        password: "",
-        confirmPassword: "",
-        firstName: "",
-        lastName: "",
-        role: "" as UserRole,
-        program: "",
-        department: "",
-        studentId: "",
-        employeeId: ""
-      });
-
       onClose();
+      // Form will be reset by useEffect when dialog closes
     } catch (error: any) {
+      // Error is already handled by AuthContext
       console.error('Registration error:', error);
-      toast.error("Registration failed", {
-        description: error.message || "Please try again"
-      });
-    } finally {
-      setIsLoading(false);
     }
   };
+
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>

@@ -79,7 +79,13 @@ export function Image({
       // Retry after delay
       setCurrentAttempt(prev => prev + 1)
       retryTimeoutRef.current = setTimeout(() => {
-        setCurrentSrc(`${src}?retry=${currentAttempt + 1}`)
+        // Only retry if src is not empty
+        if (src && src.trim() !== '') {
+          setCurrentSrc(`${src}?retry=${currentAttempt + 1}`)
+        } else {
+          setHasError(true)
+          setIsLoading(false)
+        }
       }, retryDelay * (currentAttempt + 1)) // Exponential backoff
     } else {
       setHasError(true)
@@ -92,8 +98,8 @@ export function Image({
     setCurrentAttempt(0) // Reset attempt counter on successful load
   }
 
-  // Show fallback if error or no src
-  if (hasError || !src || src === '') {
+  // Show fallback if error or no src or empty src
+  if (hasError || !src || src === '' || src.trim() === '') {
     return (
       <div
         ref={imgRef}
@@ -128,15 +134,15 @@ export function Image({
   }
 
   return (
-    <img 
+    <img
       ref={imgRef}
-      src={currentSrc} 
-      alt={alt} 
+      src={currentSrc || undefined}
+      alt={alt}
       className={`transition-opacity duration-300 ${isLoading ? 'opacity-0' : 'opacity-100'} ${className || ''}`}
       onError={handleError}
       onLoad={handleLoad}
       loading={lazy ? 'lazy' : 'eager'}
-      {...props} 
+      {...props}
     />
   )
 }

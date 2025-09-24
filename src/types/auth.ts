@@ -20,6 +20,8 @@ export interface AuthState {
   user: User | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  error: string | null;
+  lastOperation: 'login' | 'register' | 'logout' | 'initialize' | null;
 }
 
 // Role-based permissions
@@ -113,3 +115,74 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   librarian: 'Library Staff',
   admin: 'Administrator',
 };
+
+// Authentication error types
+export type AuthErrorType =
+  | 'INVALID_CREDENTIALS'
+  | 'NETWORK_ERROR'
+  | 'TIMEOUT_ERROR'
+  | 'REGISTRATION_FAILED'
+  | 'USER_NOT_FOUND'
+  | 'SESSION_EXPIRED'
+  | 'UNKNOWN_ERROR';
+
+export interface AuthError {
+  type: AuthErrorType;
+  message: string;
+  originalError?: any;
+  retryable: boolean;
+}
+
+// Enhanced user interface with additional metadata
+export interface UserProfile extends User {
+  preferences?: {
+    theme: 'light' | 'dark' | 'system';
+    notifications: boolean;
+    language: string;
+  };
+  lastActivityAt?: string;
+  loginCount?: number;
+}
+
+// Authentication context methods
+export interface AuthMethods {
+  login: (email: string, password: string) => Promise<void>;
+  register: (userData: RegisterData) => Promise<void>;
+  logout: () => Promise<void>;
+  hasPermission: (permission: keyof RolePermissions) => boolean;
+  getUserPermissions: () => RolePermissions;
+  clearError: () => void;
+  retry: () => Promise<void>;
+  refreshProfile: () => Promise<void>;
+}
+
+// Registration data with validation
+export interface RegisterData {
+  email: string;
+  password: string;
+  firstName: string;
+  lastName: string;
+  role: UserRole;
+  program?: string;
+  department?: string;
+  studentId?: string;
+  employeeId?: string;
+  acceptTerms: boolean;
+  captchaToken?: string;
+}
+
+// Validation result for forms
+export interface ValidationResult {
+  isValid: boolean;
+  errors: Record<string, string>;
+}
+
+// Authentication status for debugging
+export interface AuthStatus {
+  isAuthenticated: boolean;
+  isLoading: boolean;
+  hasError: boolean;
+  lastOperation: string | null;
+  sessionAge: number | null;
+  retryCount: number;
+}

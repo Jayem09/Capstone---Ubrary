@@ -118,7 +118,7 @@ export function Sidebar({ selectedCategory, onCategoryChange, onUploadClick, onC
                 <item.icon className="w-4 h-4 mr-3 flex-shrink-0" />
                 <span className="flex-1 text-left font-medium truncate">{item.label}</span>
                 <Badge variant="secondary" className="ml-2 flex-shrink-0 text-xs font-semibold">
-                  {item.count}
+                  {loading ? '...' : item.count}
                 </Badge>
               </Button>
             ))}
@@ -144,7 +144,7 @@ export function Sidebar({ selectedCategory, onCategoryChange, onUploadClick, onC
                 <category.icon className="w-4 h-4 mr-3 flex-shrink-0" />
                 <span className="flex-1 text-left text-sm font-medium truncate">{category.label}</span>
                 <Badge variant="outline" className="ml-2 flex-shrink-0 text-xs font-semibold">
-                  {category.count}
+                  {loading ? '...' : category.count}
                 </Badge>
               </Button>
             ))}

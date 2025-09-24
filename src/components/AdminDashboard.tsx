@@ -1,10 +1,10 @@
 import { useState } from 'react';
-import { 
-  Users, 
-  FileText, 
-  TrendingUp, 
-  Shield, 
-  Settings, 
+import {
+  Users,
+  FileText,
+  TrendingUp,
+  Shield,
+  Settings,
   Database,
   Activity,
   AlertTriangle,
@@ -194,24 +194,24 @@ export function AdminDashboard() {
           <Card className="p-6">
             <h3 className="text-lg font-semibold mb-4">Quick Actions</h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 className="h-auto p-4 flex flex-col items-center gap-2"
                 onClick={() => toast.info("Backup initiated", { description: "System backup is starting..." })}
               >
                 <Database className="w-6 h-6" />
                 <span>Backup System</span>
               </Button>
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 className="h-auto p-4 flex flex-col items-center gap-2"
                 onClick={() => toast.info("Maintenance mode", { description: "Entering maintenance mode..." })}
               >
                 <Settings className="w-6 h-6" />
                 <span>Maintenance Mode</span>
               </Button>
-              <Button 
-                variant="outline" 
+              <Button
+                variant="outline"
                 className="h-auto p-4 flex flex-col items-center gap-2"
                 onClick={() => toast.success("System check completed", { description: "All systems are running normally" })}
               >

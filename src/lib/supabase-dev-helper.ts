@@ -21,7 +21,61 @@ export const devSupabaseHelpers = {
     }
 
     try {
-      // First, try to create the document directly
+      // First, ensure the user exists in the users table
+      const { data: existingUser } = await supabase
+        .from('users')
+        .select('id')
+        .eq('id', document.user_id)
+        .single()
+
+      // If user doesn't exist, create a basic user record
+      if (!existingUser) {
+        console.log('🔧 Creating user record for document upload...')
+        const { error: userError } = await supabase
+          .from('users')
+          .insert({
+            id: document.user_id,
+            email: `user${document.user_id}@demo.com`, // Demo email for development
+            first_name: 'Demo',
+            last_name: 'User',
+            role: 'student',
+            is_active: true
+          })
+
+        if (userError) {
+          console.warn('Could not create user record, continuing anyway:', userError)
+        }
+      }
+
+      // Also ensure adviser exists (since we're using user_id as adviser_id)
+      const adviserId = document.adviser_id || document.user_id
+      if (adviserId !== document.user_id) {
+        const { data: existingAdviser } = await supabase
+          .from('users')
+          .select('id')
+          .eq('id', adviserId)
+          .single()
+
+        if (!existingAdviser) {
+          console.log('🔧 Creating adviser record...')
+          const { error: adviserError } = await supabase
+            .from('users')
+            .insert({
+              id: adviserId,
+              email: `adviser${adviserId}@demo.com`, // Demo email for development
+              first_name: 'Demo',
+              last_name: 'Adviser',
+              role: 'faculty',
+              is_active: true
+            })
+
+          if (adviserError) {
+            console.warn('Could not create adviser record:', adviserError)
+          }
+        }
+      }
+
+      // Now create the document
       const { data: doc, error: docError } = await supabase
         .from('documents')
         .insert({

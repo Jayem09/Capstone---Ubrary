@@ -41,6 +41,20 @@ function AppContent() {
   const [isViewerFullscreen, setIsViewerFullscreen] = useState(false);
   const [isUploadOpen, setIsUploadOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [loadingTimeout, setLoadingTimeout] = useState(false);
+
+  // Add timeout to prevent infinite loading
+  useEffect(() => {
+    if (isLoading) {
+      const timeout = setTimeout(() => {
+        setLoadingTimeout(true);
+      }, 5000); // 5 seconds max loading time
+
+      return () => clearTimeout(timeout);
+    } else {
+      setLoadingTimeout(false);
+    }
+  }, [isLoading]);
 
   // Prevent body scroll when mobile sidebar is open
   useEffect(() => {
@@ -73,13 +87,13 @@ function AppContent() {
     setIsUploadOpen(true);
   };
 
-  // Show loading state
-  if (isLoading) {
+  // Show minimal loading state only for a short time (max 5 seconds)
+  if (isLoading && !loadingTimeout) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#8B0000] mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading UBrary...</p>
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#8B0000] mx-auto mb-2"></div>
+          <p className="text-gray-600 text-sm">Loading...</p>
         </div>
       </div>
     );
@@ -126,10 +140,11 @@ function AppContent() {
             setIsRegisterOpen(true);
           }}
         />
-        <RegisterDialog 
-          isOpen={isRegisterOpen} 
+        <RegisterDialog
+          isOpen={isRegisterOpen}
           onClose={() => setIsRegisterOpen(false)}
         />
+
         <Toaster />
       </div>
     );
@@ -195,7 +210,7 @@ function AppContent() {
                   onDocumentView={(document) => {
                     setSelectedDocument(document);
                     setIsViewerOpen(true);
-                    setIsViewerFullscreen(true); // Fullscreen mode for workflow
+                    setIsViewerFullscreen(true); 
                   }}
                 />
               </div>

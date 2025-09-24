@@ -5,11 +5,10 @@ import { Button } from './ui/button'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select'
 import { Input } from './ui/input'
-import { 
-  FileText, 
-  Clock, 
-  CheckCircle, 
-  XCircle, 
+import {
+  FileText,
+  Clock,
+  CheckCircle,
   Eye,
   Edit,
   MessageSquare,
@@ -64,9 +63,9 @@ const statusConfig = {
     icon: Edit,
     description: 'Document requires revisions before approval'
   },
-  approved: { 
-    label: 'Approved', 
-    color: 'bg-green-100 text-green-800', 
+  approved: {
+    label: 'Approved',
+    color: 'bg-green-100 text-green-800',
     icon: CheckCircle,
     description: 'Document approved and ready for curation'
   },
@@ -87,12 +86,6 @@ const statusConfig = {
     color: 'bg-green-100 text-green-800', 
     icon: CheckCircle,
     description: 'Document published and available to public'
-  },
-  rejected: { 
-    label: 'Rejected', 
-    color: 'bg-red-100 text-red-800', 
-    icon: XCircle,
-    description: 'Document rejected and not suitable for publication'
   }
 }
 
@@ -159,6 +152,7 @@ export function WorkflowDashboard({ onDocumentView }: WorkflowDashboardProps) {
     try {
       const stats = await WorkflowService.getWorkflowStatistics(user.id, user.role)
       setStatistics(stats)
+
     } catch (error) {
       console.error('Error fetching statistics:', error)
     }
@@ -413,9 +407,10 @@ export function WorkflowDashboard({ onDocumentView }: WorkflowDashboardProps) {
       {/* Statistics Cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {Object.entries(statistics).map(([status, count]) => {
-          const config = statusConfig[status as DocumentStatus]
+          const config = statusConfig[status as keyof typeof statusConfig]
+          if (!config) return null // Skip unknown statuses
           const Icon = config.icon
-          
+
           return (
             <Card key={status}>
               <CardContent className="p-4">
@@ -584,15 +579,16 @@ export function WorkflowDashboard({ onDocumentView }: WorkflowDashboardProps) {
                   <FileText className="w-12 h-12 text-gray-400 mx-auto mb-4" />
                   <h3 className="text-lg font-medium text-gray-900 mb-2">No documents found</h3>
                   <p className="text-gray-500">
-                    {selectedStatus === 'all' 
-                      ? 'No documents in the workflow yet.' 
-                      : `No documents with status "${statusConfig[selectedStatus as DocumentStatus]?.label}"`}
+                    {selectedStatus === 'all'
+                      ? 'No documents in the workflow yet.'
+                      : `No documents with status "${statusConfig[selectedStatus as keyof typeof statusConfig]?.label}"`}
                   </p>
                 </div>
               ) : (
                 <div className="space-y-4">
                   {filteredDocuments.map((document) => {
-                    const config = statusConfig[document.status]
+                    const config = statusConfig[document.status as keyof typeof statusConfig]
+                    if (!config) return null
                     const Icon = config.icon
                     const actions = getStatusActions(document)
 

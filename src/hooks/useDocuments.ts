@@ -157,8 +157,6 @@ export function useDocumentUpload() {
     setError(null)
 
     try {
-      console.log('🔄 Starting document upload...', documentData.title)
-      
       // Simulate upload progress for UI feedback
       const progressInterval = setInterval(() => {
         setUploadProgress(prev => {
@@ -174,12 +172,11 @@ export function useDocumentUpload() {
       setTimeout(() => {
         clearInterval(progressInterval)
         setUploadProgress(90)
-        console.log('🔄 Processing document...')
       }, 1000)
 
-      // Add timeout to prevent hanging
+      // Add timeout to prevent hanging (increased for large files)
       const timeoutPromise = new Promise((_, reject) => {
-        setTimeout(() => reject(new Error('Upload timed out after 30 seconds')), 30000)
+        setTimeout(() => reject(new Error('Upload timed out after 3 minutes')), 180000)
       })
 
       const result = await Promise.race([
@@ -187,17 +184,13 @@ export function useDocumentUpload() {
         timeoutPromise
       ]) as any
 
-      console.log('📄 Document creation result:', result)
-
       if (result.error) {
-        console.error('❌ Document creation failed:', result.error)
         setError('Failed to upload document: ' + (result.error.message || 'Unknown error'))
         setUploadProgress(0)
         setUploading(false)
         return { data: null, error: result.error }
       }
 
-      console.log('✅ Document uploaded successfully!')
       setUploadProgress(100)
 
       // Complete the progress
@@ -208,7 +201,6 @@ export function useDocumentUpload() {
 
       return { data: result.data, error: null }
     } catch (err: any) {
-      console.error('❌ Upload error:', err)
       setError('Upload failed: ' + (err.message || 'An unexpected error occurred'))
       setUploading(false)
       setUploadProgress(0)

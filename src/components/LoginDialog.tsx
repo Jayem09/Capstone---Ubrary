@@ -1,9 +1,10 @@
-import { useState } from "react";
-import { LogIn } from "lucide-react";
+import { useState, useEffect } from "react";
+import { LogIn, AlertCircle } from "lucide-react";
 import { Button } from "./ui/button";
 import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "./ui/dialog";
+import { Alert, AlertDescription } from "./ui/alert";
 import { toast } from "sonner";
 import { useAuth } from "../contexts/AuthContext";
 
@@ -14,62 +15,58 @@ interface LoginDialogProps {
 }
 
 export function LoginDialog({ isOpen, onClose, onShowRegister }: LoginDialogProps) {
-  const { login } = useAuth();
-  const [isLoading, setIsLoading] = useState(false);
+  const { login, isLoading, error, clearError, retry } = useAuth();
   const [formData, setFormData] = useState({
     email: "",
     password: ""
   });
 
+  // Reset form when dialog closes
+  useEffect(() => {
+    if (!isOpen) {
+      setFormData({ email: "", password: "" });
+      clearError();
+    }
+  }, [isOpen, clearError]);
+
   const handleInputChange = (field: string, value: string) => {
     setFormData({ ...formData, [field]: value });
+    // Clear any existing errors when user starts typing
+    if (error) clearError();
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!formData.email || !formData.password) {
       toast.error("Please fill in all fields");
       return;
     }
 
-    setIsLoading(true);
+    // Trim inputs
+    const email = formData.email.trim();
+    const password = formData.password;
+
+    if (!email || !password) {
+      toast.error("Please fill in all fields");
+      return;
+    }
 
     try {
-      await login(formData.email, formData.password);
-      
+      await login(email, password);
       toast.success("Login successful!");
       onClose();
-      
-      // Reset form
-      setFormData({
-        email: "",
-        password: ""
-      });
+      // Form will be reset by useEffect when dialog closes
     } catch (error: any) {
+      // Error is already handled by AuthContext
       console.error('Login error:', error);
-      toast.error("Login failed", {
-        description: error.message || "Please check your credentials"
-      });
-    } finally {
-      setIsLoading(false);
     }
   };
 
-  const handleDemoLogin = async () => {
-    setIsLoading(true);
-    try {
-      // Try to login with demo credentials
-      await login('john.dinglasan@ub.edu.ph', 'password');
-      toast.success("Demo login successful!");
-      onClose();
-    } catch (error: any) {
-      console.error('Demo login error:', error);
-      toast.error("Demo login failed", {
-        description: "Please use the registration form to create an account"
-      });
-    } finally {
-      setIsLoading(false);
+
+  const handleRetry = async () => {
+    if (error) {
+      await retry();
     }
   };
 
@@ -87,6 +84,26 @@ export function LoginDialog({ isOpen, onClose, onShowRegister }: LoginDialogProp
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Error Display */}
+          {error && (
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription className="flex items-center justify-between">
+                <span>{error}</span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleRetry}
+                  className="h-auto p-1 ml-2"
+                  disabled={isLoading}
+                >
+                  Retry
+                </Button>
+              </AlertDescription>
+            </Alert>
+          )}
+
           <div>
             <Label htmlFor="email">Email</Label>
             <Input
@@ -95,6 +112,7 @@ export function LoginDialog({ isOpen, onClose, onShowRegister }: LoginDialogProp
               value={formData.email}
               onChange={(e) => handleInputChange("email", e.target.value)}
               placeholder="your.email@ub.edu.ph"
+              disabled={isLoading}
               required
             />
           </div>
@@ -107,27 +125,18 @@ export function LoginDialog({ isOpen, onClose, onShowRegister }: LoginDialogProp
               value={formData.password}
               onChange={(e) => handleInputChange("password", e.target.value)}
               placeholder="Your password"
+              disabled={isLoading}
               required
             />
           </div>
 
           <div className="flex flex-col space-y-2 pt-4">
-            <Button 
-              type="submit" 
-              className="bg-[#8B0000] hover:bg-red-800 w-full" 
+            <Button
+              type="submit"
+              className="bg-[#8B0000] hover:bg-red-800 w-full"
               disabled={isLoading}
             >
               {isLoading ? "Signing In..." : "Sign In"}
-            </Button>
-            
-            <Button 
-              type="button" 
-              variant="outline" 
-              onClick={handleDemoLogin}
-              disabled={isLoading}
-              className="w-full"
-            >
-              Try Demo Login
             </Button>
           </div>
         </form>
@@ -138,6 +147,7 @@ export function LoginDialog({ isOpen, onClose, onShowRegister }: LoginDialogProp
             <button
               onClick={onShowRegister}
               className="text-[#8B0000] hover:underline font-medium"
+              disabled={isLoading}
             >
               Create Account
             </button>

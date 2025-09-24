@@ -1,27 +1,43 @@
 import { createClient } from '@supabase/supabase-js'
 import { supabaseConfig } from '../config/supabase'
 
-// Create Supabase client with proper configuration
+// Create Supabase client with enhanced configuration for reliability
 export const supabase = createClient(
   supabaseConfig.getUrl(),
   supabaseConfig.getAnonKey(),
   {
     auth: {
-      // Always enable these for better UX - no more session clearing needed!
+      // Enhanced auth configuration to prevent freezing
       autoRefreshToken: true,
       persistSession: true,
       detectSessionInUrl: true,
-      // Always use localStorage for session persistence
       storage: window.localStorage,
-      // Set longer session timeout
-      storageKey: 'ubrary-auth-token'
+      storageKey: 'ubrary-auth-token',
+      // Add flow type for better security
+      flowType: 'pkce',
+      // Improve session handling
+      debug: false // Set to true in development if needed
+    },
+    // Add global configuration for better reliability
+    global: {
+      headers: {
+        'X-Client-Info': 'ubrary-web-app'
+      }
+    },
+    // Database configuration
+    db: {
+      schema: 'public'
+    },
+    // Add realtime configuration to prevent connection issues
+    realtime: {
+      params: {
+        eventsPerSecond: 10
+      }
     }
   }
 )
 
-// Configuration is ready for use
-
-// Helper functions for common database operations
+// Enhanced helper functions with retry logic and better error handling
 export const supabaseHelpers = {
   // Documents
   async getDocuments(options?: {
@@ -267,3 +283,72 @@ export const supabaseHelpers = {
       .remove([path])
   }
 }
+
+// Utility functions for retry logic and better error handling
+export const supabaseUtils = {
+  // Retry a function with exponential backoff
+  async retryWithBackoff<T,>(
+    fn: () => Promise<T>,
+    maxRetries: number = 3,
+    baseDelay: number = 1000
+  ): Promise<T> {
+    let lastError: Error;
+
+    for (let i = 0; i < maxRetries; i++) {
+      try {
+        return await fn();
+      } catch (error: any) {
+        lastError = error;
+
+        // Don't retry for authentication errors
+        if (error?.message?.includes('Invalid login credentials') ||
+            error?.message?.includes('User not found') ||
+            error?.code === 'PGRST116') {
+          throw error;
+        }
+
+        if (i === maxRetries - 1) break;
+
+        // Exponential backoff
+        const delay = baseDelay * Math.pow(2, i);
+        console.log(`🔄 Retry attempt ${i + 1} after ${delay}ms delay`);
+        await new Promise(resolve => setTimeout(resolve, delay));
+      }
+    }
+
+    throw lastError!;
+  },
+
+  // Check if Supabase connection is healthy
+  async checkConnection(): Promise<boolean> {
+    try {
+      const { error } = await supabase.from('users').select('count', { count: 'exact', head: true });
+      return !error;
+    } catch {
+      return false;
+    }
+  },
+
+  // Enhanced error parser
+  parseError(error: any): string {
+    if (typeof error === 'string') return error;
+
+    if (error?.message) return error.message;
+
+    if (error?.error_description) return error.error_description;
+
+    if (error?.details) return error.details;
+
+    return 'An unexpected error occurred';
+  },
+
+  // Timeout wrapper for operations
+  withTimeout<T,>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+    return Promise.race([
+      promise,
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error(`Operation timeout after ${timeoutMs}ms`)), timeoutMs)
+      )
+    ]);
+  }
+};

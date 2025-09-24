@@ -172,7 +172,7 @@ export function DocumentCard({ document, onDocumentView, onDownloadUpdate, isLoa
       {/* Thumbnail */}
       <div className="relative h-48 bg-gray-100 rounded-t-lg overflow-hidden">
         <Image
-          src={document.thumbnail}
+          src={document.thumbnail && document.thumbnail.trim() !== '' ? document.thumbnail : undefined}
           alt={document.title}
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
           showSkeleton={isLoadingThumbnail}

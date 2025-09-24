@@ -21,28 +21,19 @@ export class DocumentService {
         })
         
         if (error) {
-          console.error('Error fetching documents (dev):', error)
-          
-          // Type-safe error handling
           const errorMessage = (error as any)?.message || 'Unknown error'
-          const errorDetails = (error as any)?.details || null
-          const errorHint = (error as any)?.hint || null
-          const errorCode = (error as any)?.code || null
-          
-          console.error('Error details:', errorMessage, errorDetails, errorHint)
-          
+
           // If it's an RLS error, recursion error, or empty database, return empty array
           if (
-            errorMessage?.includes('RLS') || 
-            errorMessage?.includes('permission') || 
+            errorMessage?.includes('RLS') ||
+            errorMessage?.includes('permission') ||
             errorMessage?.includes('recursion') ||
             errorMessage?.includes('infinite') ||
-            errorCode === 'PGRST116'
+            (error as any)?.code === 'PGRST116'
           ) {
-            console.log('🔧 Database appears empty or has RLS issues - returning empty array')
             return { data: [], error: null }
           }
-          
+
           toast.error('Failed to load documents')
           return { data: [], error }
         }
@@ -138,23 +129,9 @@ export class DocumentService {
     thumbnail?: File
   }) {
     try {
-      console.log('📝 Creating document:', {
-        title: document.title,
-        userId: document.userId,
-        program: document.program,
-        keywordCount: document.keywords.length,
-        hasFile: !!document.file
-      })
-
-      // Skip user check for now to avoid timeout issues
-      console.log('⚡ Skipping user check to avoid timeout - proceeding with upload')
-
       // For now, use the user as their own adviser if no adviser is specified
       const adviserId = document.adviserId || document.userId;
-      
-      // Use development helper for document creation
-      console.log('🔄 Using development helper for document creation...')
-      
+
       const { data: newDocument, error: docError } = await devSupabaseHelpers.createDocumentDev({
         title: document.title,
         abstract: document.abstract,
@@ -168,7 +145,6 @@ export class DocumentService {
       })
 
       if (docError) {
-        console.error('❌ Error creating document:', docError)
         const errorMessage = (docError as any)?.message || 'Failed to create document'
         toast.error('Document creation failed', {
           description: errorMessage
@@ -177,21 +153,16 @@ export class DocumentService {
       }
 
       if (!newDocument) {
-        console.error('❌ No document returned from creation')
         toast.error('Document creation failed', {
           description: 'No document data returned'
         })
         return { data: null, error: new Error('No document created') }
       }
 
-      console.log('✅ Document created successfully:', newDocument.id)
-
       // Upload file if provided
       if (document.file && newDocument) {
         const fileResult = await this.uploadDocumentFile(newDocument.id, document.file)
         if (fileResult.error) {
-          // If file upload fails, we might want to delete the document or mark it as incomplete
-          console.error('File upload failed:', fileResult.error)
           toast.error('Document created but file upload failed')
         }
       }
@@ -200,7 +171,6 @@ export class DocumentService {
       if (document.thumbnail && newDocument) {
         const thumbnailResult = await this.uploadDocumentThumbnail(newDocument.id, document.thumbnail)
         if (thumbnailResult.error) {
-          console.warn('Thumbnail upload failed:', thumbnailResult.error)
           // Don't show error to user as thumbnail is optional
         }
       }
@@ -208,7 +178,6 @@ export class DocumentService {
       toast.success('Document submitted successfully')
       return { data: newDocument, error: null }
     } catch (error) {
-      console.error('Error in createDocument:', error)
       toast.error('An unexpected error occurred')
       return { data: null, error }
     }
