@@ -18,17 +18,16 @@ export class CitationGenerator {
   private static readonly DEFAULT_UNIVERSITY = "University of Batangas"
 
   /**
-   * Generate APA 7th Edition citation for a thesis/dissertation
+   * Generate APA citation in simplified format
+   * Format: Author, A. A. (Year). Title of the work. Publisher.
+   * Example: Rowling, J. K. (1997). Harry Potter and the Philosopher's Stone. Bloomsbury.
    */
   static generateAPA(document: DocumentCitation): string {
     const {
       title,
       author_names,
-      adviser_name,
-      program,
       year,
       published_at,
-      pages,
       university = this.DEFAULT_UNIVERSITY
     } = document
 
@@ -36,25 +35,14 @@ export class CitationGenerator {
     const authors = this.parseAuthors(author_names)
     const authorString = this.formatAPAAuthors(authors)
 
-    // Format title (italicized in APA)
-    const formattedTitle = this.formatTitle(title)
+    // Format title (keep original capitalization)
+    const formattedTitle = title
 
     // Format publication year
     const pubYear = published_at ? new Date(published_at).getFullYear() : year
 
-    // Format degree type based on program
-    const degreeType = this.getDegreeType(program)
-
-    // Format pages if available
-    const pageInfo = pages ? ` (${pages} pp.)` : ""
-
-    // Format adviser if available
-    const adviserInfo = adviser_name ? ` [Supervised by ${adviser_name}]` : ""
-
-    // APA Format for unpublished thesis/dissertation:
-    // Author, A. A. (Year). Title of thesis/dissertation [Unpublished master's thesis/doctoral dissertation]. University Name.
-    
-    return `${authorString} (${pubYear}). *${formattedTitle}* [Unpublished ${degreeType}]. ${university}${pageInfo}${adviserInfo}.`
+    // Simple APA Format: Author, A. A. (Year). Title. Publisher.
+    return `${authorString} (${pubYear}). ${formattedTitle}. ${university}.`
   }
 
   /**
@@ -164,16 +152,17 @@ ${adviserField}}`
   }
 
   /**
-   * Format authors for APA style
+   * Format authors for APA style with initials
+   * Format: Last, F. I.
    */
   private static formatAPAAuthors(authors: string[]): string {
     if (authors.length === 1) {
-      return this.lastFirstFormat(authors[0])
+      return this.lastFirstInitialsFormat(authors[0])
     } else if (authors.length === 2) {
-      return `${this.lastFirstFormat(authors[0])}, & ${this.lastFirstFormat(authors[1])}`
+      return `${this.lastFirstInitialsFormat(authors[0])}, & ${this.lastFirstInitialsFormat(authors[1])}`
     } else {
-      const formatted = authors.slice(0, -1).map(author => this.lastFirstFormat(author))
-      return `${formatted.join(', ')}, & ${this.lastFirstFormat(authors[authors.length - 1])}`
+      const formatted = authors.slice(0, -1).map(author => this.lastFirstInitialsFormat(author))
+      return `${formatted.join(', ')}, & ${this.lastFirstInitialsFormat(authors[authors.length - 1])}`
     }
   }
 
@@ -219,6 +208,25 @@ ${adviserField}}`
     const firstName = parts.slice(0, -1).join(' ')
     const lastName = parts[parts.length - 1]
     return `${lastName}, ${firstName}`
+  }
+
+  /**
+   * Convert "First Middle Last" to "Last, F. M." format (with initials)
+   * Example: "John Ronald Last" -> "Last, J. R."
+   */
+  private static lastFirstInitialsFormat(name: string): string {
+    const parts = name.trim().split(' ')
+    if (parts.length < 2) return name
+    
+    const lastName = parts[parts.length - 1]
+    const firstNames = parts.slice(0, -1)
+    
+    // Get initials from all first/middle names
+    const initials = firstNames
+      .map(name => name.charAt(0).toUpperCase() + '.')
+      .join(' ')
+    
+    return `${lastName}, ${initials}`
   }
 
   /**

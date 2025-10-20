@@ -1,4 +1,4 @@
-import { Home, Upload, Star, Clock, FileText, Shield, BarChart3, Users } from "lucide-react";
+import { Home, Upload, Star, Clock, FileText, Shield, BarChart3, Users, Sparkles } from "lucide-react";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
 import { cn } from "./ui/utils";
@@ -10,6 +10,7 @@ interface SidebarProps {
   selectedCategory: string;
   onCategoryChange: (category: string) => void;
   onUploadClick: () => void;
+  onTitleGeneratorClick?: () => void;
   onClose?: () => void;
 }
 
@@ -21,7 +22,7 @@ const categoryConfig = [
   { id: "nursing", label: "Nursing", icon: FileText, dbKey: "nursing" },
 ];
 
-export function Sidebar({ selectedCategory, onCategoryChange, onUploadClick, onClose }: SidebarProps) {
+export function Sidebar({ selectedCategory, onCategoryChange, onUploadClick, onTitleGeneratorClick, onClose }: SidebarProps) {
   const { user, hasPermission } = useAuth();
   const { stats, loading } = useSidebarStats();
 
@@ -86,16 +87,28 @@ export function Sidebar({ selectedCategory, onCategoryChange, onUploadClick, onC
   return (
     <aside className="w-64 bg-white border-r border-gray-200 h-screen sticky top-0">
       <div className="p-6">
-        {/* Upload Button */}
-        <PermissionGuard permission="canUpload">
+        {/* Action Buttons */}
+        <div className="space-y-3 mb-6">
+          {/* Upload Button */}
+          <PermissionGuard permission="canUpload">
+            <Button 
+              className="w-full bg-[#8B0000] hover:bg-red-800 text-white"
+              onClick={onUploadClick}
+            >
+              <Upload className="w-4 h-4 mr-2" />
+              Upload Thesis
+            </Button>
+          </PermissionGuard>
+
+          {/* Title Generator Button */}
           <Button 
-            className="w-full bg-[#8B0000] hover:bg-red-800 text-white mb-6"
-            onClick={onUploadClick}
+            className="w-full bg-[#8B0000] hover:bg-red-800 text-white"
+            onClick={onTitleGeneratorClick}
           >
-            <Upload className="w-4 h-4 mr-2" />
-            Upload Thesis
+            <Sparkles className="w-4 h-4 mr-2" />
+            AI Title Generator
           </Button>
-        </PermissionGuard>
+        </div>
 
         {/* Navigation */}
         <nav className="space-y-2">

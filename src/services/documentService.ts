@@ -1,5 +1,7 @@
 import { supabase, supabaseHelpers } from '../lib/supabase'
 import { devSupabaseHelpers } from '../lib/supabase-dev-helper'
+import { PDFConversionService } from './pdfConversionService'
+import type { ConversionResult } from './pdfConversionService'
 import { toast } from 'sonner'
 
 export class DocumentService {
@@ -72,7 +74,29 @@ export class DocumentService {
 
         return { data: filteredData, error: null }
       } else {
-        // Production path
+        // Production path with full-text search support
+        if (options?.search && options.search.trim()) {
+          // Use full-text search function
+          const { data, error } = await supabase.rpc('search_documents', {
+            p_query: options.search.trim(),
+            p_program: options.category && options.category !== 'all' ? options.category : null,
+            p_year: null,
+            p_status: options.includeUnpublished ? null : 'published',
+            p_limit: options.limit || 20,
+            p_offset: options.offset || 0,
+            p_user_id: options.userId || null
+          })
+
+          if (error) {
+            console.error('Search error:', error)
+            toast.error('Search failed')
+            return { data: [], error }
+          }
+
+          return { data: data || [], error: null }
+        }
+
+        // Standard query without search
         const { data, error } = await supabaseHelpers.getDocuments(options)
         
         if (error) {
@@ -231,8 +255,8 @@ export class DocumentService {
     }
   }
 
-  // Upload document file to Supabase Storage
-  static async uploadDocumentFile(documentId: string, file: File) {
+  // Upload document file to Supabase Storage with PDF/A conversion
+  static async uploadDocumentFile(documentId: string, file: File, enablePDFAConversion: boolean = true) {
     try {
       const fileExt = file.name.split('.').pop()
       const fileName = `${documentId}.${fileExt}`
@@ -244,9 +268,45 @@ export class DocumentService {
         pageCount = await this.extractPdfPageCount(file);
       }
 
+      // PDF/A conversion for PDF files
+      let finalFile = file;
+      let pdfAFilePath = null;
+      let pdfACompliant = false;
+      let pdfAComplianceScore = 0;
+      let pdfAValidationIssues: string[] = [];
+      let pdfAValidationWarnings: string[] = [];
+      let conversionTime = 0;
+
+      if (file.type === 'application/pdf' && enablePDFAConversion) {
+        try {
+          const conversionResult = await PDFConversionService.convertToPDFA(file);
+          
+          if (conversionResult.success && conversionResult.convertedFile) {
+            finalFile = conversionResult.convertedFile;
+            pdfAFilePath = `documents/${documentId}/${conversionResult.convertedFile.name}`;
+            pdfACompliant = conversionResult.validationResult.isCompliant;
+            pdfAComplianceScore = conversionResult.validationResult.score;
+            pdfAValidationIssues = conversionResult.validationResult.issues;
+            pdfAValidationWarnings = conversionResult.validationResult.warnings;
+            conversionTime = conversionResult.conversionTime;
+
+            // Log the conversion
+            await this.logPDFAConversion(documentId, file, conversionResult);
+          } else {
+            // Use original file if conversion fails
+            toast.warning('PDF/A conversion failed, using original file', {
+              description: conversionResult.error || 'Unknown error'
+            });
+          }
+        } catch (conversionError) {
+          console.error('PDF/A conversion error:', conversionError);
+          toast.warning('PDF/A conversion failed, using original file');
+        }
+      }
+
       // Use development helper for file upload in dev environment
       if (import.meta.env.DEV) {
-        const { data, error } = await devSupabaseHelpers.uploadFileDev(file, filePath)
+        const { data, error } = await devSupabaseHelpers.uploadFileDev(finalFile, filePath)
         
         if (error) {
           console.error('Error uploading file (dev):', error)
@@ -256,10 +316,10 @@ export class DocumentService {
         // Save file metadata using development helper
         const { error: dbError } = await devSupabaseHelpers.saveFileMetadataDev({
           document_id: documentId,
-          file_name: file.name,
+          file_name: finalFile.name,
           file_path: filePath,
-          file_size: this.formatFileSize(file.size),
-          file_type: file.type,
+          file_size: this.formatFileSize(finalFile.size),
+          file_type: finalFile.type,
           is_primary: true
         })
 
@@ -268,12 +328,19 @@ export class DocumentService {
           return { data: null, error: dbError }
         }
 
-        // Update document with page count and file size
+        // Update document with page count, file size, and PDF/A metadata
         const { error: updateError } = await supabase
           .from('documents')
           .update({
             pages: pageCount,
-            file_size: this.formatFileSize(file.size)
+            file_size: this.formatFileSize(finalFile.size),
+            pdfa_compliant: pdfACompliant,
+            pdfa_compliance_score: pdfAComplianceScore,
+            pdfa_validation_issues: pdfAValidationIssues,
+            pdfa_validation_warnings: pdfAValidationWarnings,
+            pdfa_file_path: pdfAFilePath,
+            conversion_time_ms: conversionTime,
+            pdfa_conversion_date: pdfACompliant ? new Date().toISOString() : null
           })
           .eq('id', documentId)
 
@@ -284,7 +351,7 @@ export class DocumentService {
         return { data, error: null }
       } else {
         // Production path
-        const { data, error } = await supabaseHelpers.uploadFile(file, filePath)
+        const { data, error } = await supabaseHelpers.uploadFile(finalFile, filePath)
         
         if (error) {
           console.error('Error uploading file:', error)
@@ -296,10 +363,10 @@ export class DocumentService {
           .from('document_files')
           .insert({
             document_id: documentId,
-            file_name: file.name,
+            file_name: finalFile.name,
             file_path: filePath,
-            file_size: this.formatFileSize(file.size),
-            file_type: file.type,
+            file_size: this.formatFileSize(finalFile.size),
+            file_type: finalFile.type,
             is_primary: true
           })
 
@@ -308,12 +375,19 @@ export class DocumentService {
           return { data: null, error: dbError }
         }
 
-        // Update document with page count and file size
+        // Update document with page count, file size, and PDF/A metadata
         const { error: updateError } = await supabase
           .from('documents')
           .update({
             pages: pageCount,
-            file_size: this.formatFileSize(file.size)
+            file_size: this.formatFileSize(finalFile.size),
+            pdfa_compliant: pdfACompliant,
+            pdfa_compliance_score: pdfAComplianceScore,
+            pdfa_validation_issues: pdfAValidationIssues,
+            pdfa_validation_warnings: pdfAValidationWarnings,
+            pdfa_file_path: pdfAFilePath,
+            conversion_time_ms: conversionTime,
+            pdfa_conversion_date: pdfACompliant ? new Date().toISOString() : null
           })
           .eq('id', documentId)
 
@@ -538,6 +612,26 @@ export class DocumentService {
         pendingReviews: 0,
         monthlyUploads: 0
       }
+    }
+  }
+
+  // Log PDF/A conversion for audit trail
+  private static async logPDFAConversion(documentId: string, originalFile: File, conversionResult: ConversionResult): Promise<void> {
+    try {
+      // This would typically log to a database table for audit purposes
+      // For now, we'll just log to console
+      console.log('PDF/A Conversion Log:', {
+        documentId,
+        originalFileName: originalFile.name,
+        originalFileSize: originalFile.size,
+        conversionSuccess: conversionResult.success,
+        complianceScore: conversionResult.validationResult.score,
+        conversionTime: conversionResult.conversionTime,
+        issues: conversionResult.validationResult.issues,
+        warnings: conversionResult.validationResult.warnings
+      });
+    } catch (error) {
+      console.error('Error logging PDF/A conversion:', error);
     }
   }
 

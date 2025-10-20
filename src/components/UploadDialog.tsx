@@ -10,6 +10,7 @@ import { Progress } from "./ui/progress";
 import { toast } from "sonner";
 import { useAuth } from "../contexts/AuthContext";
 import { useDocumentUpload } from "../hooks/useDocuments";
+import { PDFAValidation } from "./PDFAValidation";
 
 interface UploadDialogProps {
   isOpen: boolean;
@@ -300,6 +301,21 @@ export function UploadDialog({ isOpen, onClose }: UploadDialogProps) {
                 Maximum file size: 50MB. Only PDF files are accepted.
               </p>
             </div>
+
+            {/* PDF/A Validation */}
+            {formData.file && (
+              <PDFAValidation 
+                file={formData.file}
+                onConversionComplete={(result) => {
+                  if (result.success && result.convertedFile) {
+                    setFormData({ ...formData, file: result.convertedFile });
+                    toast.success('Document converted to PDF/A format');
+                  }
+                }}
+                showConvertButton={true}
+                className="mt-4"
+              />
+            )}
 
             {/* Thumbnail Upload */}
             <div>

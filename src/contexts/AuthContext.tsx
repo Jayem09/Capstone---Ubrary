@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import type { AuthState, UserRole, RolePermissions, User } from '../types/auth';
 import { ROLE_PERMISSIONS } from '../types/auth';
 import { supabase } from '../lib/supabase';
+import { toast } from 'sonner';
 
 interface AuthContextType extends AuthState {
   login: (email: string, password: string) => Promise<void>;
@@ -112,7 +113,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       ...prev,
       isLoading,
       lastOperation: operation,
-      error: isLoading ? null : prev.error, // Clear error when starting new operation
+      // Only clear error when starting a new operation (isLoading = true)
+      // Don't clear error when finishing an operation (isLoading = false)
+      error: isLoading ? null : prev.error,
     }));
   }, []);
 
@@ -135,10 +138,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  // Initialize authentication state - INSTANT VERSION (no session checks)
+  // Initialize authentication state
   const initializeAuth = useCallback(() => {
-    // Skip all session checks and database queries for now
-    // Set to not authenticated immediately for instant loading
     setAuthState({
       user: null,
       isAuthenticated: false,
@@ -199,7 +200,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLoadingState(true, 'login');
 
     try {
-      // Use timeout wrapper for login attempt
+      // Use Supabase authentication
       const { data, error } = await withTimeout(
         supabase.auth.signInWithPassword({
           email: email.trim(),
@@ -210,16 +211,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       );
 
       if (error) {
-        throw new Error(error.message || 'Invalid credentials');
+        // Show specific error message for invalid credentials
+        let userFriendlyMessage = 'Login failed';
+        if (error.message.includes('Invalid login credentials') || 
+            error.message.includes('invalid') || 
+            error.message.includes('credentials')) {
+          userFriendlyMessage = 'Invalid credentials - Please check your email and password';
+        } else if (error.message.includes('timeout')) {
+          userFriendlyMessage = 'Login timeout - please check your connection';
+        } else {
+          userFriendlyMessage = `Login failed - ${error.message || 'An error occurred during login'}`;
+        }
+        setErrorState(userFriendlyMessage, 'login');
+        throw new Error(userFriendlyMessage);
       }
 
       if (!data.user) {
-        throw new Error('Authentication failed');
+        const errorMessage = 'Authentication failed';
+        setErrorState(errorMessage, 'login');
+        throw new Error(errorMessage);
       }
 
+      // Clear any previous errors on successful login
+      setErrorState(null, 'login');
+
     } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'Login failed';
-      setErrorState(errorMessage, 'login');
+      // Only set error state if it's not already set above
+      if (!authState.error) {
+        const errorMessage = error instanceof Error ? error.message : 'Login failed';
+        setErrorState(errorMessage, 'login');
+      }
       throw error;
     }
   };
@@ -236,7 +257,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLoadingState(true, 'register');
 
     try {
-      // Create auth user with metadata - simplified version
+      // Use Supabase registration
       const { data: authData, error: authError } = await withTimeout(
         supabase.auth.signUp({
           email: userData.email.trim(),
@@ -258,19 +279,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       );
 
       if (authError) {
-        throw new Error(authError.message || 'Registration failed');
+        // Show specific error messages for registration
+        let userFriendlyMessage = 'Registration failed';
+        if (authError.message.includes('already registered') || 
+            authError.message.includes('already exists')) {
+          userFriendlyMessage = 'Account already exists - An account with this email already exists. Please try logging in instead.';
+        } else if (authError.message.includes('password')) {
+          userFriendlyMessage = 'Password requirements not met';
+        } else if (authError.message.includes('timeout')) {
+          userFriendlyMessage = 'Registration timeout - please check your connection';
+        } else {
+          userFriendlyMessage = `Registration failed - ${authError.message || 'An error occurred during registration'}`;
+        }
+        setErrorState(userFriendlyMessage, 'register');
+        throw new Error(userFriendlyMessage);
       }
 
       if (!authData.user) {
-        throw new Error('Registration failed - no user returned');
+        const errorMessage = 'Registration failed - no user returned';
+        setErrorState(errorMessage, 'register');
+        throw new Error(errorMessage);
       }
+
+      // Clear any previous errors on successful registration
+      setErrorState(null, 'register');
 
       // Skip profile verification and database operations for now
       // User profile will be created automatically by auth state change listener
 
     } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : 'Registration failed';
-      setErrorState(errorMessage, 'register');
+      // Only set error state if it's not already set above
+      if (!authState.error) {
+        const errorMessage = error instanceof Error ? error.message : 'Registration failed';
+        setErrorState(errorMessage, 'register');
+      }
       throw error;
     }
   };
@@ -279,7 +321,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setLoadingState(true, 'logout');
 
     try {
-      // Sign out from Supabase with timeout
+      // Use Supabase logout
       await withTimeout(
         supabase.auth.signOut(),
         10000,
@@ -298,7 +340,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       localStorage.removeItem('ubrary_user');
 
     } catch (error: unknown) {
-      // Still clear local state even if Supabase logout fails
+      // Still clear local state even if logout fails
       setAuthState({
         user: null,
         isAuthenticated: false,

@@ -5,7 +5,6 @@ import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "./ui/dialog";
 import { Alert, AlertDescription } from "./ui/alert";
-import { toast } from "sonner";
 import { useAuth } from "../contexts/AuthContext";
 
 interface LoginDialogProps {
@@ -15,50 +14,108 @@ interface LoginDialogProps {
 }
 
 export function LoginDialog({ isOpen, onClose, onShowRegister }: LoginDialogProps) {
-  const { login, isLoading, error, clearError, retry } = useAuth();
+  const { login, isLoading, error, clearError, retry, isAuthenticated } = useAuth();
   const [formData, setFormData] = useState({
     email: "",
     password: ""
   });
+  const [validationError, setValidationError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<{
+    email?: string;
+    password?: string;
+  }>({});
 
   // Reset form when dialog closes
   useEffect(() => {
     if (!isOpen) {
       setFormData({ email: "", password: "" });
       clearError();
+      setValidationError(null);
+      setFieldErrors({});
     }
   }, [isOpen, clearError]);
 
+  // Close dialog when authentication is successful
+  useEffect(() => {
+    if (isAuthenticated && isOpen) {
+      onClose();
+    }
+  }, [isAuthenticated, isOpen, onClose]);
+
+  const validateEmail = (email: string): string | null => {
+    if (!email.trim()) return "Email is required";
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) return "Please enter a valid email address";
+    if (email.length > 254) return "Email address is too long";
+    return null;
+  };
+
+  const validatePassword = (password: string): string | null => {
+    if (!password) return "Password is required";
+    if (password.length < 6) return "Password must be at least 6 characters";
+    if (password.length > 128) return "Password is too long";
+    return null;
+  };
+
   const handleInputChange = (field: string, value: string) => {
     setFormData({ ...formData, [field]: value });
+    
     // Clear any existing errors when user starts typing
     if (error) clearError();
+    if (validationError) setValidationError(null);
+    
+    // Validate the field immediately
+    let fieldError: string | null = null;
+    
+    if (field === 'email') {
+      fieldError = validateEmail(value);
+    } else if (field === 'password') {
+      fieldError = validatePassword(value);
+    }
+    
+    // Update field errors
+    setFieldErrors(prev => ({
+      ...prev,
+      [field]: fieldError || undefined
+    }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
-    if (!formData.email || !formData.password) {
-      toast.error("Please fill in all fields");
-      return;
-    }
+    setValidationError(null);
+    setFieldErrors({});
 
     // Trim inputs
     const email = formData.email.trim();
     const password = formData.password;
 
-    if (!email || !password) {
-      toast.error("Please fill in all fields");
+    // Validate all fields
+    const emailError = validateEmail(email);
+    const passwordError = validatePassword(password);
+
+    if (emailError || passwordError) {
+      setFieldErrors({
+        email: emailError || undefined,
+        password: passwordError || undefined
+      });
+      
+      if (emailError && passwordError) {
+        setValidationError("Please fix the errors above before continuing");
+      } else if (emailError) {
+        setValidationError("Please enter a valid email address");
+      } else if (passwordError) {
+        setValidationError("Please enter a valid password");
+      }
       return;
     }
 
     try {
       await login(email, password);
-      toast.success("Login successful!");
-      onClose();
-      // Form will be reset by useEffect when dialog closes
+      // Success message is shown by AuthContext
+      // Dialog will close automatically when isAuthenticated becomes true
     } catch (error: any) {
       // Error is already handled by AuthContext
+      // Don't close dialog on error - let user see the error message
       console.error('Login error:', error);
     }
   };
@@ -85,21 +142,23 @@ export function LoginDialog({ isOpen, onClose, onShowRegister }: LoginDialogProp
 
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Error Display */}
-          {error && (
+          {(error || validationError) && (
             <Alert variant="destructive">
               <AlertCircle className="h-4 w-4" />
               <AlertDescription className="flex items-center justify-between">
-                <span>{error}</span>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleRetry}
-                  className="h-auto p-1 ml-2"
-                  disabled={isLoading}
-                >
-                  Retry
-                </Button>
+                <span>{validationError || error}</span>
+                {error && !validationError && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleRetry}
+                    className="h-auto p-1 ml-2"
+                    disabled={isLoading}
+                  >
+                    Retry
+                  </Button>
+                )}
               </AlertDescription>
             </Alert>
           )}
@@ -114,7 +173,14 @@ export function LoginDialog({ isOpen, onClose, onShowRegister }: LoginDialogProp
               placeholder="your.email@ub.edu.ph"
               disabled={isLoading}
               required
+              className={fieldErrors.email ? "border-red-500 focus:border-red-500" : ""}
             />
+            {fieldErrors.email && (
+              <p className="text-sm text-red-600 mt-1 flex items-center">
+                <AlertCircle className="w-4 h-4 mr-1" />
+                {fieldErrors.email}
+              </p>
+            )}
           </div>
 
           <div>
@@ -127,7 +193,14 @@ export function LoginDialog({ isOpen, onClose, onShowRegister }: LoginDialogProp
               placeholder="Your password"
               disabled={isLoading}
               required
+              className={fieldErrors.password ? "border-red-500 focus:border-red-500" : ""}
             />
+            {fieldErrors.password && (
+              <p className="text-sm text-red-600 mt-1 flex items-center">
+                <AlertCircle className="w-4 h-4 mr-1" />
+                {fieldErrors.password}
+              </p>
+            )}
           </div>
 
           <div className="flex flex-col space-y-2 pt-4">

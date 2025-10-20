@@ -2,15 +2,21 @@ import { Header } from "./components/Header";
 import { Sidebar } from "./components/Sidebar";
 import { DocumentGrid } from "./components/DocumentGrid";
 import { SearchFilters } from "./components/SearchFilters";
-import { DocumentViewer } from "./components/DocumentViewer";
-import { UploadDialog } from "./components/UploadDialog";
-import { AdminDashboard } from "./components/AdminDashboard";
-import { WorkflowDashboard } from "./components/WorkflowDashboard";
 import { LoginDialog } from "./components/LoginDialog";
 import { RegisterDialog } from "./components/RegisterDialog";
+import { PerformanceMonitor } from "./components/PerformanceMonitor";
 import { Toaster } from "./components/ui/sonner";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { SidebarStatsProvider } from "./contexts/SidebarStatsContext";
+import { PerformanceService } from "./services/performanceService";
+import { 
+  LazyDocumentViewer, 
+  LazyUploadDialog, 
+  LazyAdminDashboard, 
+  LazyWorkflowDashboard,
+  LazyTitleGenerator,
+  preloadComponents
+} from "./components/LazyComponents";
 import { useState, useEffect } from "react";
 import { Menu, X, LogIn } from "lucide-react";
 import { Button } from "./components/ui/button";
@@ -40,8 +46,21 @@ function AppContent() {
   const [isViewerOpen, setIsViewerOpen] = useState(false);
   const [isViewerFullscreen, setIsViewerFullscreen] = useState(false);
   const [isUploadOpen, setIsUploadOpen] = useState(false);
+  const [isTitleGeneratorOpen, setIsTitleGeneratorOpen] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [loadingTimeout, setLoadingTimeout] = useState(false);
+
+  // Performance: Memoize expensive operations
+  // const memoizedSearchQuery = useMemo(() => searchQuery.trim(), [searchQuery]);
+
+  // Performance: Preload components when user is authenticated
+  useEffect(() => {
+    if (isAuthenticated) {
+      preloadComponents();
+      // Prefetch documents for common categories
+      PerformanceService.prefetchDocuments(['bsit', 'bscs', 'bsee']);
+    }
+  }, [isAuthenticated]);
 
   // Add timeout to prevent infinite loading
   useEffect(() => {
@@ -104,30 +123,34 @@ function AppContent() {
     return (
       <div className="min-h-screen bg-gray-50">
         <Header />
-        <div className="flex items-center justify-center min-h-[calc(100vh-80px)]">
-          <div className="text-center bg-white p-8 rounded-lg shadow-lg max-w-md w-full mx-4">
-            <div className="mb-6">
-              <LogIn className="w-16 h-16 text-[#8B0000] mx-auto mb-4" />
-              <h2 className="text-2xl font-bold text-gray-900 mb-2">Welcome to UBrary</h2>
-              <p className="text-gray-600">
-                Sign in to access the University of Batangas Repository for Academic Research and Yields
-              </p>
+        <div className="flex items-center justify-center min-h-[calc(100vh-80px)] p-4">
+          <div className="max-w-2xl w-full space-y-6">
+            {/* Main Login Card */}
+            <div className="text-center bg-white p-8 rounded-lg shadow-lg">
+              <div className="mb-6">
+                <LogIn className="w-16 h-16 text-[#8B0000] mx-auto mb-4" />
+                <h2 className="text-2xl font-bold text-gray-900 mb-2">Welcome to UBrary</h2>
+                <p className="text-gray-600">
+                  Sign in to access the University of Batangas Repository for Academic Research and Yields
+                </p>
+              </div>
+              <div className="space-y-3">
+                <Button 
+                  onClick={() => setIsLoginOpen(true)}
+                  className="w-full bg-[#8B0000] hover:bg-red-800"
+                >
+                  Sign In
+                </Button>
+                <Button 
+                  onClick={() => setIsRegisterOpen(true)}
+                  variant="outline"
+                  className="w-full"
+                >
+                  Create Account
+                </Button>
+              </div>
             </div>
-            <div className="space-y-3">
-              <Button 
-                onClick={() => setIsLoginOpen(true)}
-                className="w-full bg-[#8B0000] hover:bg-red-800"
-              >
-                Sign In
-              </Button>
-              <Button 
-                onClick={() => setIsRegisterOpen(true)}
-                variant="outline"
-                className="w-full"
-              >
-                Create Account
-              </Button>
-            </div>
+
           </div>
         </div>
         
@@ -193,6 +216,7 @@ function AppContent() {
               selectedCategory={selectedCategory}
               onCategoryChange={setSelectedCategory}
               onUploadClick={handleUploadClick}
+              onTitleGeneratorClick={() => setIsTitleGeneratorOpen(true)}
               onClose={() => setIsSidebarOpen(false)}
             />
           </div>
@@ -202,11 +226,11 @@ function AppContent() {
         {!isViewerFullscreen && (
           <main className="flex-1 p-4 lg:p-6 lg:ml-0 relative z-0">
             {selectedCategory === 'admin' ? (
-              <AdminDashboard />
+              <LazyAdminDashboard />
             ) : selectedCategory === 'workflow' ? (
               <div className="max-w-7xl mx-auto">
                 <h1 className="text-3xl font-bold mb-6">Document Workflow</h1>
-                <WorkflowDashboard 
+                <LazyWorkflowDashboard 
                   onDocumentView={(document) => {
                     setSelectedDocument(document);
                     setIsViewerOpen(true);
@@ -257,7 +281,7 @@ function AppContent() {
       </div>
 
       {/* Document Viewer Modal */}
-      <DocumentViewer
+      <LazyDocumentViewer
         document={selectedDocument}
         isOpen={isViewerOpen}
         fullscreen={isViewerFullscreen}
@@ -268,13 +292,22 @@ function AppContent() {
       />
 
       {/* Upload Dialog */}
-      <UploadDialog
+      <LazyUploadDialog
         isOpen={isUploadOpen}
         onClose={() => setIsUploadOpen(false)}
       />
 
+      {/* Title Generator Dialog */}
+      <LazyTitleGenerator
+        isOpen={isTitleGeneratorOpen}
+        onClose={() => setIsTitleGeneratorOpen(false)}
+      />
+
       {/* Toast Notifications */}
       <Toaster />
+
+      {/* Performance Monitor (Development Only) */}
+      {import.meta.env.DEV && <PerformanceMonitor />}
     </div>
   );
 }

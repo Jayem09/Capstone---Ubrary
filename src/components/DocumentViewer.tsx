@@ -74,7 +74,6 @@ export function DocumentViewer({ document, isOpen, onClose, fullscreen = false }
   const [rotation, setRotation] = useState(0);
   const [isStarred, setIsStarred] = useState(false);
   const [showCitation, setShowCitation] = useState(false);
-  const [citationFormat, setCitationFormat] = useState<'APA' | 'MLA' | 'Chicago' | 'BibTeX'>('APA');
   const [citationCopied, setCitationCopied] = useState(false);
   const [showToolbar, setShowToolbar] = useState(true);
   const [showSidebar, setShowSidebar] = useState(false);
@@ -393,8 +392,8 @@ export function DocumentViewer({ document, isOpen, onClose, fullscreen = false }
     }
   };
 
-  // Citation generation functions
-  const generateCitation = (format: 'APA' | 'MLA' | 'Chicago' | 'BibTeX'): string => {
+  // Citation generation function (APA only)
+  const generateCitation = (): string => {
     try {
       if (!document) {
         return 'No document available for citation generation.';
@@ -412,18 +411,7 @@ export function DocumentViewer({ document, isOpen, onClose, fullscreen = false }
         pages: null // We don't have pages in the Document interface
       };
 
-      switch (format) {
-        case 'APA':
-          return CitationGenerator.generateAPA(citationData);
-        case 'MLA':
-          return CitationGenerator.generateMLA(citationData);
-        case 'Chicago':
-          return CitationGenerator.generateChicago(citationData);
-        case 'BibTeX':
-          return CitationGenerator.generateBibTeX(citationData);
-        default:
-          return CitationGenerator.generateAPA(citationData);
-      }
+      return CitationGenerator.generateAPA(citationData);
     } catch (error) {
       console.error('Error generating citation:', error);
       return 'Error generating citation. Please try again.';
@@ -431,12 +419,12 @@ export function DocumentViewer({ document, isOpen, onClose, fullscreen = false }
   };
 
   const handleCopyCitation = async () => {
-    const citation = generateCitation(citationFormat);
+    const citation = generateCitation();
     const success = await CitationGenerator.copyToClipboard(citation);
     
     if (success) {
       setCitationCopied(true);
-      toast.success(`${citationFormat} citation copied to clipboard!`);
+      toast.success('APA citation copied to clipboard!');
       setTimeout(() => setCitationCopied(false), 2000);
     } else {
       toast.error("Failed to copy citation");
@@ -534,7 +522,7 @@ export function DocumentViewer({ document, isOpen, onClose, fullscreen = false }
                     <div className="fixed top-20 right-4 w-96 max-w-[calc(100vw-2rem)] p-4 bg-white border border-gray-200 rounded-lg shadow-xl z-[9999] animate-in slide-in-from-top-2 duration-200">
                     <div className="space-y-4">
                     <div className="flex items-center justify-between">
-                      <h3 className="font-semibold text-lg">Generate Citation</h3>
+                      <h3 className="font-semibold text-lg">APA Citation</h3>
                       <button
                         onClick={() => setShowCitation(false)}
                         className="p-1 hover:bg-gray-100 rounded-md transition-colors"
@@ -543,34 +531,17 @@ export function DocumentViewer({ document, isOpen, onClose, fullscreen = false }
                       </button>
                     </div>
                     
-                    {/* Format Selection */}
-                    <div className="flex flex-wrap gap-2">
-                      {(['APA', 'MLA', 'Chicago', 'BibTeX'] as const).map((format) => (
-                        <button
-                          key={format}
-                          onClick={() => setCitationFormat(format)}
-                          className={`text-sm font-medium px-3 py-2 rounded-md border transition-colors ${
-                            citationFormat === format 
-                              ? 'bg-blue-600 text-white hover:bg-blue-700 border-blue-600' 
-                              : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50'
-                          }`}
-                        >
-                          {format}
-                        </button>
-                      ))}
-                    </div>
-                    
                     {/* Citation Preview */}
                     <div className="bg-gray-50 p-4 rounded-md border max-h-32 overflow-y-auto">
                       <p className="text-sm text-gray-800 leading-relaxed whitespace-pre-wrap font-mono">
-                        {generateCitation(citationFormat) || 'Loading citation...'}
+                        {generateCitation() || 'Loading citation...'}
                       </p>
                     </div>
                     
                     {/* Copy Button */}
                     <button
                       onClick={handleCopyCitation}
-                      className="w-full bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded-md border border-green-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="w-full bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded-md border border-green-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
                       disabled={citationCopied}
                     >
                       {citationCopied ? (
@@ -581,7 +552,7 @@ export function DocumentViewer({ document, isOpen, onClose, fullscreen = false }
                       ) : (
                         <>
                           <Copy className="w-4 h-4 mr-2" />
-                          Copy {citationFormat} Citation
+                          Copy APA Citation
                         </>
                       )}
                     </button>

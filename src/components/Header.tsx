@@ -1,4 +1,4 @@
-import { Bell, Settings, User, LogOut } from "lucide-react";
+import { Settings, User, LogOut } from "lucide-react";
 import { Button } from "./ui/button";
 import { Avatar, AvatarFallback } from "./ui/avatar";
 import { toast } from "sonner";
@@ -12,26 +12,20 @@ import {
 import { useAuth } from "../contexts/AuthContext";
 import { ROLE_LABELS } from "../types/auth";
 import { Badge } from "./ui/badge";
+import { UserSettingsDialog } from "./UserSettingsDialog";
+import { WorkflowNotifications } from "./WorkflowNotifications";
+import { useState } from "react";
 
 export function Header() {
   const { user, logout } = useAuth();
-
-  const handleNotificationClick = () => {
-    toast.info("No new notifications", {
-      description: "You're all caught up!"
-    });
-  };
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   const handleProfileClick = () => {
-    toast.info("Profile", {
-      description: "Opening profile settings..."
-    });
+    setIsSettingsOpen(true);
   };
 
   const handleSettingsClick = () => {
-    toast.info("Settings", {
-      description: "Opening application settings..."
-    });
+    setIsSettingsOpen(true);
   };
 
   const handleSignOut = () => {
@@ -64,10 +58,10 @@ export function Header() {
 
         {/* Right side - User info and actions */}
         <div className="flex items-center space-x-2 lg:space-x-4">
-          {/* Notifications */}
-          <Button variant="ghost" size="icon" className="text-white hover:bg-red-700" onClick={handleNotificationClick}>
-            <Bell className="w-4 h-4 lg:w-5 lg:h-5" />
-          </Button>
+          {/* Workflow Notifications */}
+          <div className="text-white [&_button]:text-white [&_button:hover]:bg-red-700">
+            <WorkflowNotifications />
+          </div>
 
           {/* User Menu */}
           <DropdownMenu>
@@ -126,6 +120,12 @@ export function Header() {
           </DropdownMenu>
         </div>
       </div>
+
+      {/* User Settings Dialog */}
+      <UserSettingsDialog 
+        isOpen={isSettingsOpen} 
+        onClose={() => setIsSettingsOpen(false)} 
+      />
     </header>
   );
 }
